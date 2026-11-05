@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'https://ia-clasificador-de-residuos.onrender.com';
+const API_URL = 'https://corte-vertical-ia-clasificador-de.onrender.com';
 
 export const classifyImage = async (file) => {
   const formData = new FormData();
