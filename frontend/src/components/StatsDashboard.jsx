@@ -27,7 +27,7 @@ const StatsDashboard = () => {
 
   return (
     <div className="w-full max-w-4xl mx-auto p-6 bg-white rounded-xl shadow-lg mt-8">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Panel de Control (MLOps)</h2>
+      <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Panel de Control </h2>
       
       {/* Tarjetas de Métricas Globales */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

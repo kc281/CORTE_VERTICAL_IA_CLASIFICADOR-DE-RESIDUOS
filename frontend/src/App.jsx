@@ -13,7 +13,7 @@ function App() {
   const [prediction, setPrediction] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   
-  // NUEVO ESTADO: Controla qué vista se muestra ('classifier' o 'stats')
+  
   const [currentView, setCurrentView] = useState('classifier');
   
   const webcamRef = useRef(null);
