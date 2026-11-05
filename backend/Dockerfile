@@ -4,6 +4,12 @@ FROM python:3.12-slim
 # Evita que Python escriba archivos .pyc y permite ver logs en tiempo real
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# ... después de tus ENV existentes ...
+# Desactiva las optimizaciones oneDNN que causan Segmentation Fault en algunas CPUs
+ENV TF_ENABLE_ONEDNN_OPTS=0
+# Limita los hilos de CPU para evitar conflictos en entornos con recursos limitados
+ENV TF_NUM_INTRAOP_THREADS=1
+ENV TF_NUM_INTEROP_THREADS=1
 
 WORKDIR /app
 
