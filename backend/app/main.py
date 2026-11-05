@@ -1,5 +1,6 @@
 """Punto de entrada del backend FastAPI."""
 import logging
+import psycopg2
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
