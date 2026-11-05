@@ -63,7 +63,7 @@ async def predict_endpoint(
     # 3) Timestamp 
     result["timestamp"] = datetime.now(timezone.utc).isoformat()
 
-    # 4) Guardar metadatos en la Base de Datos (Supabase)
+    # 4) Guardar metadatos en la Base de Datos 
     try:
         db_log = models.PredictionLog(
             clase_predicha=result["clase"],
@@ -75,7 +75,7 @@ async def predict_endpoint(
         db.commit()
     except Exception as e:
         # Si falla la BD, hacemos rollback y registramos el error, 
-        # pero NO le negamos el resultado al usuario porque la IA sí funcionó.
+        
         db.rollback()
         logger.error(f"Error al guardar en la base de datos: {e}")
 
@@ -89,13 +89,13 @@ async def get_stats(db: Session = Depends(get_db)):
     Utiliza la base de datos para calcular promedios y distribuciones.
     """
     try:
-        # 1. Conteo por clase (GROUP BY)
+        # 1. Conteo por clase 
         conteo_clases = db.query(
             models.PredictionLog.clase_predicha, 
             func.count(models.PredictionLog.id).label("cantidad")
         ).group_by(models.PredictionLog.clase_predicha).all()
 
-        # 2. Métricas globales (Promedios y totales)
+        # 2. Métricas globales 
         metricas_globales = db.query(
             func.count(models.PredictionLog.id).label("total_consultas"),
             func.avg(models.PredictionLog.confianza).label("confianza_promedio"),
