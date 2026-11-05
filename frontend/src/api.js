@@ -20,3 +20,11 @@ export const classifyImage = async (file) => {
     throw new Error('No se pudo conectar con el servidor.');
   }
 };
+export const getStats = async () => {
+  try {
+    const response = await axios.get(`${API_URL}/stats`);
+    return response.data;
+  } catch (error) {
+    throw new Error('No se pudieron cargar las estadísticas.');
+  }
+};

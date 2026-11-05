@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 from app import config
 from app.model_loader import get_model
 from app.routes import router
+from app.database import engine, Base
+from app import models
 
 # ─── Logging ─────────────────────────────────────
 logging.basicConfig(
@@ -32,6 +34,7 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Apagando backend...")
 
+Base.metadata.create_all(bind=engine)
 
 # ─── App ─────────────────────────────────────────
 app = FastAPI(
