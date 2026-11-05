@@ -25,12 +25,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Iniciando backend de clasificación de residuos...")
-    try:
-        get_model()
-        logger.info("Modelo precargado y listo para inferencia.")
-    except Exception as exc:
-        logger.error(f"No se pudo precargar el modelo: {exc}")
-        raise
+    
     yield
     logger.info("Apagando backend...")
 
