@@ -12,7 +12,7 @@
 2. Abrir SQL Editor.
 3. Ejecutar el contenido de `schema.sql` para crear la tabla `prediction_logs`.
 
-![Ejecucion schema.sql](/imgs/Ejecucion_schema.png.png) 
+![Ejecucion schema.sql](/imgs/Ejecucion_schema.png) 
 
 4. Ejecutar el contenido de `seed.sql` para insertar los registros de prueba.
 
