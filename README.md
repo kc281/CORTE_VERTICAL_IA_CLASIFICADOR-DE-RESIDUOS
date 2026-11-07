@@ -56,7 +56,7 @@ graph TD
 
 ---
 
-## 📋 3. Plantilla de Alcance del Corte Vertical (Guia Semana 12)
+## 📋 3. Plantilla de Alcance del Corte Vertical (Guia Semana 12) -Actualizada
 
 | Elemento | Descripción del Grupo |
 | :--- | :--- |
