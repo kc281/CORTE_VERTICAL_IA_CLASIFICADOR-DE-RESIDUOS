@@ -73,9 +73,11 @@ graph TD
 
 ---
 
-## 🧪 4.Pruebas de Persistencia y Base de Datos (Guia Semana 13)
+##  📖 4.Link Tablas de requerimientos: [Tablas de requerimientos](DOCS/Tablas%20de%20requerimientos.docx.pdf)
 
-## Link Tablas de requerimientos: [Tablas de requerimientos](DOCS/Tablas%20de%20requerimientos.docx.pdf)
+---
+
+## 🧪 5.Pruebas de Persistencia y Base de Datos (Guia Semana 13)
 
 ### 1. Requisitos y Configuración
 - **Base de Datos:** PostgreSQL (Alojada en Supabase).
