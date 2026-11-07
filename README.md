@@ -75,6 +75,9 @@ graph TD
 
 ## 🧪 4.Pruebas de Persistencia y Base de Datos (Guia Semana 13)
 
+## Link Tablas de requerimientos: 
+![Tabla en Supabase](DOCS/Tablas%20de%20requerimientos.docx.pdf) 
+
 ### 1. Requisitos y Configuración
 - **Base de Datos:** PostgreSQL (Alojada en Supabase).
 - **ORM:** SQLAlchemy 2.0.0
