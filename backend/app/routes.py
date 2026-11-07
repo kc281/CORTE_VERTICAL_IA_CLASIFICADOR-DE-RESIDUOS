@@ -85,3 +85,16 @@ async def get_stats(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error al calcular las estadísticas en la base de datos."
         )
+
+
+@router.get("/predict/{prediction_id}", tags=["Clasificación"])
+async def get_prediction_by_id(prediction_id: int, db: Session = Depends(get_db)):
+    """Recupera el registro de una predicción específica por su ID."""
+    log = crud.get_prediction_by_id(db, prediction_id)
+    if not log:
+        # Aquí ocurre la prueba de calidad: en lugar de fallar, responde con un 404 controlado
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Registro no encontrado"
+        )
+    return log

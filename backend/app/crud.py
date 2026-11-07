@@ -66,3 +66,8 @@ def get_prediction_stats(db: Session) -> dict:
             for row in conteo_clases
         ]
     }
+
+
+def get_prediction_by_id(db: Session, prediction_id: int):
+    """Busca una predicción por su ID. Retorna None si no existe."""
+    return db.query(models.PredictionLog).filter(models.PredictionLog.id == prediction_id).first()
