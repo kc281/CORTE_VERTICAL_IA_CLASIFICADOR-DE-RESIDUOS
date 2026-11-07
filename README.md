@@ -139,4 +139,16 @@ async def get_prediction_by_id(prediction_id: int, db: Session = Depends(get_db)
 - **Evidencia:** 
 ![Manejo de Identificadores](imgs/Manejo_de_identificadores.png).
 
+### 6. Rendimiento y Volumen
+- **Objetivo:** Demostrar que el panel de estadistica no se pone lento  aunque haya muchos datos.
+- **Ejecución:** Verificar el endpoint `GET/stats`  y verificar el tiempo de respuesta.
+- 1. Abrimos el SQL Editor de Supabase y ejecutamos en el siguiente codigo para inyectar datos masivos:
+
+```INSERT INTO prediction_logs (fecha, clase_predicha, confianza, tiempo_inferencia,      advertencia_activada)
+    SELECT NOW(), 'plastic', random(), 250, false FROM generate_series(1, 1000);
+```
+- **Resultado Obtenido:**Por medio de un captura del Chrome DevTools , se verifica un tiempo de respuesta de 195ms (Un tiempo excelente teniendo en cuenta que esta consultando mas de 1000 registros) del endpoint `GET/stats`.
+- **Evidencia:** 
+![Rendmiento](imgs/integridad%20volumen.png)
+
 ---
