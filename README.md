@@ -20,8 +20,11 @@
 
 ---
 ## 🌐 Link:https://corte-vertical-ia-clasificador-de-r.vercel.app/
----
+
 ## 🫡 Integrantes:Jose Camilo Oyola , Juan David Villa , Juan Caucayo
+---
+
+
 ---
 
 ## 📖 1. Descripción del Corte Vertical
