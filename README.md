@@ -93,7 +93,7 @@ Se implementó el archivo `app/crud.py` para encapsular las consultas SQL y las 
 - **Acción:** Acceder al Dashboard desde el frontend .
 - **Resultado Esperado:** Respuesta HTTP 200 con el conteo de clases y promedios. La gráfica de pastel debe renderizar los datos.
 - **Evidencia:** 
-![Dashboard Estadísticas](imgs/Estadistica.png).
+![Dashboard Estadísticas](imgs/Estadisticas.png).
 
 
 ---
