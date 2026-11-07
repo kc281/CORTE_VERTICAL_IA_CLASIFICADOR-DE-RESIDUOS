@@ -73,7 +73,7 @@ graph TD
 
 ---
 
-##  📖 4.Link Tablas de requerimientos: [Tablas de requerimientos](DOCS/Tablas%20de%20requerimientos.docx.pdf)
+##  📖 4.Link Matriz y Verificacion de Requerimientos: [Matriz y Verificacion de Requerimientos](DOCS/Matriz%20y%20verificacion%20de%20requerimientos.pdf)
 
 ---
 
@@ -93,14 +93,14 @@ Se implementó el archivo `app/crud.py` para encapsular las consultas SQL y las 
 - **Acción:** Enviar una imagen de prueba .
 - **Resultado Esperado:** Respuesta HTTP 200 con JSON de predicción. Un nuevo registro debe insertarse en la tabla `prediction_logs`.
 - **Evidencia:**
-![Tabla en Supabase](imgs/Base_de_datos.png) .
+![Tabla en Supabase](imgs/Base_de_datos.png) 
 
 ### 3. Prueba de Lectura y Agregación (Read)
 - **Endpoint:** `GET /stats`
 - **Acción:** Acceder al Dashboard desde el frontend .
 - **Resultado Esperado:** Respuesta HTTP 200 con el conteo de clases y promedios. La gráfica de pastel debe renderizar los datos.
 - **Evidencia:** 
-![Dashboard Estadísticas](imgs/Estadisticas.png).
+![Dashboard Estadísticas](imgs/Estadisticas.png)
 
 ### 4. Prueba de Integridad de Datos
 - **Objetivo:** Validar que la base de datos rechaza datos inconsistentes (ej. un nivel de confianza mayor a 1.0) directamente a nivel de motor de base de datos.
@@ -110,7 +110,7 @@ Se implementó el archivo `app/crud.py` para encapsular las consultas SQL y las 
   VALUES (NOW(), 'metal', 1.5, 300, false);
   ```
 - **Evidencia:** 
-![Integridad de datos](imgs/Integridad_de_datos.png).
+![Integridad de datos](imgs/Integridad_de_datos.png)
 
 ### 5. Manejo de Identificadores Inexistentes
 - **Objetivo:** Validar que el sistema responde controladamente (HTTP 404) cuando se busca un recurso que no existe.
@@ -137,7 +137,7 @@ async def get_prediction_by_id(prediction_id: int, db: Session = Depends(get_db)
 ```
 - **Resultado Obtenido:** El servidor retornó un código HTTP 404 con el JSON `{"detail": "Registro no encontrado"}`.
 - **Evidencia:** 
-![Manejo de Identificadores](imgs/Manejo_de_identificadores.png).
+![Manejo de Identificadores](imgs/Manejo_de_identificadores.png)
 
 ### 6. Rendimiento y Volumen
 - **Objetivo:** Demostrar que el panel de estadistica no se pone lento  aunque haya muchos datos.
