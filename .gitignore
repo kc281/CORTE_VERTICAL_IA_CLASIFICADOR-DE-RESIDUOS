@@ -1,0 +1,19 @@
+# Variables de entorno 
+.env
+*.env
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Node 
+node_modules/
+dist/
+
+# Sistema Operativo y Editores
+.DS_Store
+.vscode/
+.idea/
