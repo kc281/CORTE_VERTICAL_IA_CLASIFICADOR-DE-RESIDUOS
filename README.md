@@ -19,6 +19,10 @@
 </div>
 
 ---
+## 🌐 Link:https://corte-vertical-ia-clasificador-de-r.vercel.app/
+---
+## 🫡 Integrantes:Jose Camilo Oyola , Juan David Villa , Juan Caucayo
+---
 
 ## 📖 1. Descripción del Corte Vertical
 
@@ -49,7 +53,7 @@ graph TD
 
 ---
 
-## 📋 3. Plantilla de Alcance del Corte Vertical
+## 📋 3. Plantilla de Alcance del Corte Vertical (Guia Semana 12)
 
 | Elemento | Descripción del Grupo |
 | :--- | :--- |
@@ -66,3 +70,30 @@ graph TD
 
 ---
 
+## 🧪 4.Pruebas de Persistencia y Base de Datos (Guia Semana 13)
+
+### 1. Requisitos y Configuración
+- **Base de Datos:** PostgreSQL (Alojada en Supabase).
+- **ORM:** SQLAlchemy 2.0.0
+- **Driver:** psycopg2-binary 2.9.9
+- **Tabla:** `prediction_logs`
+
+### 1.1 Patrón Repositorio (Separación de Responsabilidades)
+Se implementó el archivo `app/crud.py` para encapsular las consultas SQL y las escrituras en la base de datos. En `app/routes.py` ahora solo estan las llamadas y no contienen sentencias SQLAlchemy, usando asi  el principio de responsabilidad única.
+
+### 2. Prueba de Escritura (Write)
+- **Endpoint:** `POST /predict`
+- **Acción:** Enviar una imagen de prueba .
+- **Resultado Esperado:** Respuesta HTTP 200 con JSON de predicción. Un nuevo registro debe insertarse en la tabla `prediction_logs`.
+- **Evidencia:**
+![Tabla en Supabase](imgs/Base_de_datos.png) .
+
+### 3. Prueba de Lectura y Agregación (Read)
+- **Endpoint:** `GET /stats`
+- **Acción:** Acceder al Dashboard desde el frontend .
+- **Resultado Esperado:** Respuesta HTTP 200 con el conteo de clases y promedios. La gráfica de pastel debe renderizar los datos.
+- **Evidencia:** 
+  ![Dashboard Estadísticas](imgs/Estadistica.png).
+
+
+---
