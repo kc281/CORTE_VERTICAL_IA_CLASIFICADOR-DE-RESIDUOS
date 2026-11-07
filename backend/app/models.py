@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, CheckConstraint 
 from datetime import datetime
 from app.database import Base
 
@@ -11,3 +11,8 @@ class PredictionLog(Base):
     confianza = Column(Float)
     tiempo_inferencia = Column(Integer)
     advertencia_activada = Column(Boolean, default=False)
+
+    
+    __table_args__ = (
+        CheckConstraint('confianza >= 0.0 AND confianza <= 1.0', name='check_confianza_rango'),
+    )
