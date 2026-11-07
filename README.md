@@ -98,5 +98,41 @@ Se implementó el archivo `app/crud.py` para encapsular las consultas SQL y las 
 - **Evidencia:** 
 ![Dashboard Estadísticas](imgs/Estadisticas.png).
 
+### 4. Prueba de Integridad de Datos
+- **Objetivo:** Validar que la base de datos rechaza datos inconsistentes (ej. un nivel de confianza mayor a 1.0) directamente a nivel de motor de base de datos.
+- **Ejecución:** En el SQL Editor de Supabase, se intentó insertar un registro con `confianza = 1.5`.
+  ```sql
+  INSERT INTO prediction_logs (fecha, clase_predicha, confianza, tiempo_inferencia, advertencia_activada)
+  VALUES (NOW(), 'metal', 1.5, 300, false);
+  ```
+- **Evidencia:** 
+![Integridad de datos](imgs/Integridad_de_datos.png).
+
+### 5. Manejo de Identificadores Inexistentes
+- **Objetivo:** Validar que el sistema responde controladamente (HTTP 404) cuando se busca un recurso que no existe.
+- **Ejecución:** Consumir el endpoint `GET /predict/99999` (un ID que no está en la BD).
+- 1. Abrimos el  backend/app/crud.py y agregamos  esta función al final:
+
+```def get_prediction_by_id(db: Session, prediction_id: int):
+    """Busca una predicción por su ID. Retorna None si no existe."""
+    return db.query(models.PredictionLog).filter(models.PredictionLog.id == prediction_id).first()
+```
+- 2. Abrimos backend/app/routes.py y agregamos esta ruta (puede ser debajo del endpoint /stats):
+
+```@router.get("/predict/{prediction_id}", tags=["Clasificación"])
+async def get_prediction_by_id(prediction_id: int, db: Session = Depends(get_db)):
+    """Recupera el registro de una predicción específica por su ID."""
+    log = crud.get_prediction_by_id(db, prediction_id)
+    if not log:
+        # Aquí ocurre la prueba de calidad: en lugar de fallar, responde con un 404 controlado
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Registro no encontrado"
+        )
+    return log
+```
+- **Resultado Obtenido:** El servidor retornó un código HTTP 404 con el JSON `{"detail": "Registro no encontrado"}`.
+- **Evidencia:** 
+![Manejo de Identificadores](imgs/Manejo_de_identificadores.png).
 
 ---
