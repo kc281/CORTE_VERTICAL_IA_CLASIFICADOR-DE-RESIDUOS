@@ -147,7 +147,7 @@ async def get_prediction_by_id(prediction_id: int, db: Session = Depends(get_db)
 ```INSERT INTO prediction_logs (fecha, clase_predicha, confianza, tiempo_inferencia,      advertencia_activada)
     SELECT NOW(), 'plastic', random(), 250, false FROM generate_series(1, 1000);
 ```
-- **Resultado Obtenido:**Por medio de un captura del Chrome DevTools , se verifica un tiempo de respuesta de 195ms (Un tiempo excelente teniendo en cuenta que esta consultando mas de 1000 registros) del endpoint `GET/stats`.
+- **Resultado Obtenido:** Por medio de un captura del Chrome DevTools , se verifica un tiempo de respuesta de 195ms (Un tiempo excelente teniendo en cuenta que esta consultando mas de 1000 registros) del endpoint `GET/stats`.
 - **Evidencia:** 
 ![Rendmiento](imgs/integridad%20volumen.png)
 
