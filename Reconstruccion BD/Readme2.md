@@ -12,11 +12,11 @@
 2. Abrir SQL Editor.
 3. Ejecutar el contenido de `schema.sql` para crear la tabla `prediction_logs`.
 
-![Ejecucion schema.sql](imgs/Ejecucion_schema.png) 
+![Ejecucion schema.sql](/imgs/Ejecucion_schema.png.png) 
 
 4. Ejecutar el contenido de `seed.sql` para insertar los registros de prueba.
 
-![Ejecucion seed.sql](imgs/Ejecucion_seed.png) 
+![Ejecucion seed.sql](/imgs/Ejecucion_seed.png) 
 
 5. Ejecutar una consulta SELECT para comprobar los registros almacenados.
 
@@ -28,7 +28,7 @@ FROM public.prediction_logs
 ORDER BY id;
 ```
 
-![Verificacion schema.sql](imgs/Verificacion_schema.png) 
+![Verificacion schema.sql](/imgs/Verificacion_schema.png) 
 
 La reconstrucción se considera satisfactoria cuando la tabla existe, contiene los datos de prueba y permite realizar las consultas necesarias para el historial y el módulo estadístico.
 
