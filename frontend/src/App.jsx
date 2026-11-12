@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import AuthScreen from './components/AuthScreen';
 import Webcam from 'react-webcam';
-import { classifyImage } from './api';
+import { classifyImage, getCompanyInfo } from './api';
 import PrivacyModal from './components/PrivacyModal';
 import ResultCard from './components/ResultCard';
 import StatsDashboard from './components/StatsDashboard';
@@ -21,18 +21,32 @@ function App() {
   const [prediction, setPrediction] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [currentView, setCurrentView] = useState('classifier');
+  const [companyName, setCompanyName] = useState('Cargando...');
   
   const webcamRef = useRef(null);
 
-  // Verificar sesión al cargar
+  // Verificar sesión al cargar y obtener nombre de la empresa
   useEffect(() => {
+    // Función para buscar el nombre de la empresa
+    const fetchCompanyName = async () => {
+      try {
+        const data = await getCompanyInfo();
+        setCompanyName(data.company_name);
+      } catch (error) {
+        console.error("Error obteniendo empresa:", error);
+        setCompanyName("Sin empresa");
+      }
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoadingAuth(false);
+      if (session) fetchCompanyName(); // Si hay sesión, busca la empresa
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) fetchCompanyName(); // Si cambia el estado de auth, busca la empresa
     });
 
     return () => authListener.subscription.unsubscribe();
@@ -40,6 +54,7 @@ function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setCompanyName('Cargando...'); // Reiniciar el nombre al cerrar sesión
   };
 
   const capture = () => {
@@ -107,8 +122,14 @@ function App() {
       <header className="text-center mb-8 w-full max-w-2xl flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-extrabold text-primary mb-2 text-left">Clasificador de Residuos IA</h1>
-          <p className="text-sm text-gray-500 text-left">Empresa: <span className="font-semibold text-gray-700">Prueba</span> | Usuario: {session.user.email}</p>
+          
+          {/* AQUÍ YA SE MUESTRA LA VARIABLE companyName */}
+          <p className="text-sm text-gray-500 text-left">
+            Empresa: <span className="font-semibold text-gray-700">{companyName}</span> | Usuario: {session.user.email}
+          </p>
+          
           <p className="text-gray-600 mb-6">Captura o sube una imagen para identificar el tipo de residuo</p>
+          
           {/* MENÚ DE NAVEGACIÓN */}
           <div className="flex mt-4 space-x-4 bg-gray-200 p-1 rounded-lg w-fit">
             <button 
@@ -137,7 +158,7 @@ function App() {
         </button>
       </header>
 
-      {/* --- RENDERIZADO CONDICIONAL (AQUÍ ESTÁ LA MAGIA) --- */}
+      {/* --- RENDERIZADO CONDICIONAL --- */}
       {currentView === 'stats' ? (
         <StatsDashboard />
       ) : currentView === 'history' ? (
