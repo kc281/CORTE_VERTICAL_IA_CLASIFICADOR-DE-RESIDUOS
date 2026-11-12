@@ -152,3 +152,37 @@ async def get_prediction_by_id(prediction_id: int, db: Session = Depends(get_db)
 ![Rendmiento](imgs/integridad%20volumen.png)
 
 ---
+
+## 🔄 Modificación: Evolución a Plataforma Empresarial Multiempresa (SaaS)
+
+Como parte de la evolución del proyecto, la arquitectura se transformó de un sistema **"Stateless"**  a una **Plataforma Multiempresa Sencilla**. A continuación, se detallan las modificaciones y nuevas funcionalidades implementadas en esta fase.
+
+### 1. Autenticación y Seguridad (JWT)
+- **Proveedor de Identidad:** Se integró **Supabase Auth** para el registro e inicio de sesión.
+- **Protección del Backend:** Todos los endpoints críticos (`/predict`, `/stats`, `/history`) ahora están protegidos. El backend (`auth.py`) intercepta la petición, valida la firma criptográfica del Token JWT  y extrae el `user_id` del usuario.
+- **Roles:** La base de datos soporta la asignación de roles (`administrador`, `supervisor`, `empleado`).
+
+### 2. Aislamiento de Datos 
+- **Modelo Relacional:** Se amplió la base de datos en Supabase creando las tablas `companies` (empresas) y `company_members` (relación usuario-empresa). La tabla `prediction_logs` ahora incluye llaves foráneas (`company_id`, `user_id`).
+- **Regla de Negocio Crítica (RNF-33):** El backend identifica la empresa del usuario logueado a través del token y **filtra absolutamente todas las consultas SQL** (estadísticas, historial) por ese `company_id`. Un usuario de la "Empresa A" jamás podrá ver los datos de la "Empresa B".
+
+### 3. Nuevos Endpoints Implementados
+- `POST /register-company`: Registra una nueva empresa y asocia automáticamente al usuario creador como administrador.
+- `GET /company-info`: Devuelve el nombre de la empresa del usuario autenticado para mostrarlo dinámicamente en el frontend.
+- `GET /history`: Retorna el historial paginado de clasificaciones, filtrado por empresa.
+- `PATCH /predict/{id}/verify`: Permite guardar la categoría corregida por un humano.
+
+### 4. Verificación Humana
+- Se modificó el módulo de Historial en el frontend. Ahora, si una predicción de la IA tiene una confianza menor al 60%, el usuario puede hacer clic en **"Revisar"**, seleccionar la categoría correcta en un menú desplegable y **"Guardar"**.
+- Esto actualiza la columna `categoria_confirmada` en la base de datos (manteniendo intacta la predicción original de la IA), sentando las bases para el reentrenamiento del modelo.
+
+### 5. Header Dinámico
+- El frontend ya no muestra un nombre de empresa genérico. Consume el endpoint `/company-info` al iniciar sesión y renderiza el nombre real de la organización en la cabecera principal junto al correo del usuario.
+
+### 6. Escenario de Prueba Inyectado 
+Para validar la arquitectura, se inyectaron datos de prueba directamente en Supabase:
+- **3 Empresas:** Recicladora del Norte, EcoVerde S.A.S., Gestión Ambiental Bogotá.
+- **6 Usuarios (2 por empresa):** Con roles de `admin`, `supervisor` y `employee`.
+- **60 Predicciones:** 20 registros por cada empresa con fechas y confianzas aleatorias.
+
+---
