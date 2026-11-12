@@ -153,7 +153,7 @@ async def get_prediction_by_id(prediction_id: int, db: Session = Depends(get_db)
 
 ---
 
-## 🔄 Modificación: Evolución a Plataforma Empresarial Multiempresa (SaaS)
+## 🔄 Modificación: Evolución a Plataforma Empresarial Sencilla
 
 Como parte de la evolución del proyecto, la arquitectura se transformó de un sistema **"Stateless"**  a una **Plataforma Multiempresa Sencilla**. A continuación, se detallan las modificaciones y nuevas funcionalidades implementadas en esta fase.
 
