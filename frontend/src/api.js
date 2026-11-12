@@ -86,3 +86,17 @@ export const verifyPrediction = async (predictionId, categoriaCorrecta) => {
     throw new Error(error.response?.data?.detail || 'Error al verificar la predicción.');
   }
 };
+
+export const getCompanyInfo = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  try {
+    const response = await axios.get(`${API_URL}/company-info`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error('No se pudo cargar la información de la empresa.');
+  }
+};

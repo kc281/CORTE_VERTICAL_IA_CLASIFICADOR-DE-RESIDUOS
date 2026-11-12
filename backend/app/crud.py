@@ -112,3 +112,7 @@ def verify_prediction(db: Session, prediction_id: int, company_id: int, categori
         db.commit()
         db.refresh(log)
     return log
+
+def get_company_details(db: Session, company_id: int):
+    """Obtiene el registro completo de una empresa por su ID."""
+    return db.query(models.Company).filter(models.Company.id == company_id).first()

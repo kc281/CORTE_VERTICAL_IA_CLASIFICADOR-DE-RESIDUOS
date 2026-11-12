@@ -79,6 +79,24 @@ async def get_stats(
         logger.exception("Error obteniendo estadísticas")
         raise HTTPException(status_code=500, detail="Error al calcular las estadísticas.")
 
+@router.get("/company-info", tags=["Empresas"])
+async def get_company_info(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Retorna el nombre de la empresa del usuario autenticado."""
+    user_uuid = current_user["user_id"]
+    company_id = crud.get_company_id_for_user(db, user_uuid)
+    
+    if not company_id:
+        raise HTTPException(status_code=403, detail="Usuario sin empresa asociada.")
+
+    company = crud.get_company_details(db, company_id)
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada.")
+
+    return {"company_name": company.name, "company_id": company.id}
+
 @router.get("/predict/{prediction_id}", tags=["Clasificación"])
 async def get_prediction_by_id(
     prediction_id: int, 
