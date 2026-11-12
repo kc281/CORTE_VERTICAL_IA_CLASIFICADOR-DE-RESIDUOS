@@ -1,24 +1,48 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from './supabaseClient';
+import AuthScreen from './components/AuthScreen';
 import Webcam from 'react-webcam';
 import { classifyImage } from './api';
 import PrivacyModal from './components/PrivacyModal';
 import ResultCard from './components/ResultCard';
-import StatsDashboard from './components/StatsDashboard'; // <-- NUEVO IMPORT
+import StatsDashboard from './components/StatsDashboard';
+import HistoryTable from './components/HistoryTable'; 
 
 function App() {
+  // --- ESTADOS DE AUTENTICACIÓN ---
+  const [session, setSession] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
+  // --- ESTADOS DE LA APLICACIÓN ---
   const [hasConsent, setHasConsent] = useState(false);
   const [imageSrc, setImageSrc] = useState(null);
   const [fileToSend, setFileToSend] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [prediction, setPrediction] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
-  
-  
   const [currentView, setCurrentView] = useState('classifier');
   
   const webcamRef = useRef(null);
 
-  const capture = useCallback(() => {
+  // Verificar sesión al cargar
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoadingAuth(false);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => authListener.subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  const capture = () => {
     const imageSrc = webcamRef.current.getScreenshot();
     setImageSrc(imageSrc);
     setErrorMsg('');
@@ -29,7 +53,7 @@ function App() {
         const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
         setFileToSend(file);
       });
-  }, [webcamRef]);
+  };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -72,36 +96,52 @@ function App() {
     setErrorMsg('');
   };
 
-  if (!hasConsent) {
-    return <PrivacyModal onAccept={() => setHasConsent(true)} />;
-  }
+  
+  if (loadingAuth) return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
+  if (!session) return <AuthScreen onLogin={(sess) => setSession(sess)} />;
+  if (!hasConsent) return <PrivacyModal onAccept={() => setHasConsent(true)} />;
 
+  // --- UI PRINCIPAL ---
   return (
     <div className="min-h-screen py-10 px-4 flex flex-col items-center">
-      <header className="text-center mb-8">
-        <h1 className="text-3xl font-extrabold text-primary mb-2">Clasificador de Residuos IA</h1>
-        <p className="text-gray-600 mb-6">Captura o sube una imagen para identificar el tipo de residuo</p>
-        
-        {/* NUEVO: Menú de navegación entre vistas */}
-        <div className="flex justify-center space-x-4 bg-gray-200 p-1 rounded-lg w-fit mx-auto shadow-sm">
-          <button 
-            onClick={() => setCurrentView('classifier')}
-            className={`px-6 py-2 rounded-md font-bold transition-colors ${currentView === 'classifier' ? 'bg-white text-primary shadow' : 'text-gray-600 hover:text-gray-900'}`}
-          >
-            📸 Clasificador
-          </button>
-          <button 
-            onClick={() => setCurrentView('stats')}
-            className={`px-6 py-2 rounded-md font-bold transition-colors ${currentView === 'stats' ? 'bg-white text-primary shadow' : 'text-gray-600 hover:text-gray-900'}`}
-          >
-            📊 Estadísticas
-          </button>
+      <header className="text-center mb-8 w-full max-w-2xl flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-extrabold text-primary mb-2 text-left">Clasificador de Residuos IA</h1>
+          <p className="text-sm text-gray-500 text-left">Empresa: <span className="font-semibold text-gray-700">Prueba</span> | Usuario: {session.user.email}</p>
+          <p className="text-gray-600 mb-6">Captura o sube una imagen para identificar el tipo de residuo</p>
+          {/* MENÚ DE NAVEGACIÓN */}
+          <div className="flex mt-4 space-x-4 bg-gray-200 p-1 rounded-lg w-fit">
+            <button 
+              onClick={() => setCurrentView('classifier')}
+              className={`px-6 py-2 rounded-md font-bold transition-colors ${currentView === 'classifier' ? 'bg-white text-primary shadow' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              📸 Clasificador
+            </button>
+            <button 
+              onClick={() => setCurrentView('stats')}
+              className={`px-6 py-2 rounded-md font-bold transition-colors ${currentView === 'stats' ? 'bg-white text-primary shadow' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              📊 Estadísticas
+            </button>
+            <button 
+              onClick={() => setCurrentView('history')}
+              className={`px-6 py-2 rounded-md font-bold transition-colors ${currentView === 'history' ? 'bg-white text-primary shadow' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              📋 Historial
+            </button>
+          </div>
         </div>
+        
+        <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-bold text-sm shadow">
+          Cerrar Sesión
+        </button>
       </header>
 
-      {/* NUEVO: Renderizado condicional según la vista seleccionada */}
+      {/* --- RENDERIZADO CONDICIONAL (AQUÍ ESTÁ LA MAGIA) --- */}
       {currentView === 'stats' ? (
         <StatsDashboard />
+      ) : currentView === 'history' ? (
+        <HistoryTable />
       ) : (
         <main className="w-full max-w-2xl bg-white rounded-xl shadow-lg overflow-hidden">
           {errorMsg && (
