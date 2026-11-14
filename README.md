@@ -186,3 +186,40 @@ Para validar la arquitectura, se inyectaron datos de prueba directamente en Supa
 - **60 Predicciones:** 20 registros por cada empresa con fechas y confianzas aleatorias.
 
 ---
+---
+
+## 🧩 6. Lógica de negocio y API del corte vertical (Guía Semana 14)
+
+### 6.1 Arquitectura en capas del backend
+
+Flujo de cada petición: **API → Servicio de aplicación → Repositorio → Base de datos**.
+
+| Capa | Ubicación | Responsabilidad |
+| :--- | :--- | :--- |
+| API (controladores) | `backend/app/routes.py` | Recibe HTTP, valida el formato (imagen, tipos) y delega en el servicio. No contiene reglas ni SQL. |
+| Servicios de aplicación | `backend/app/services/` | Reglas de negocio de cada RF. No dependen de HTTP ni de SQLAlchemy: reciben el repositorio por inyección. |
+| Errores de negocio | `backend/app/services/exceptions.py` | `EntradaInvalida` (400), `UsuarioSinEmpresa` (403), `RecursoNoEncontrado` (404), `Conflicto` (409), `ErrorInferencia` / `ErrorPersistencia` / `ErrorConsulta` (500). `app/main.py` los traduce a HTTP con `{"detail": "..."}`. |
+| Repositorio | `backend/app/crud.py` (`PredictionRepository`) | Encapsula todas las consultas SQLAlchemy y las transacciones (`commit` / `rollback`). |
+
+### 6.2 Servicios y endpoints por requerimiento funcional
+
+| RF | Prioridad | Endpoint(s) | Servicio y método | Métodos del repositorio | Reglas / condiciones |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **RF-01** Clasificar un residuo a partir de una imagen (5 categorías) | Alta | `POST /predict` | `ClasificacionService.clasificar` | `get_company_id_for_user`, `create_prediction_log` | Imagen JPG/PNG/WEBP ≤ 5 MB y decodificable; el usuario debe pertenecer a una empresa; advertencia si la confianza es < 0,60; la respuesta exitosa se envía **después** de confirmar el guardado. |
+| **RF-02** Almacenar y consultar el historial de clasificaciones | Alta | Escritura: `POST /predict` (compartido con RF-01)<br>Consulta: `GET /history`, `GET /predict/{prediction_id}`<br>Verificación humana: `PATCH /predict/{prediction_id}/verify` | `ClasificacionService.clasificar` (escritura)<br>`HistorialService.listar`, `HistorialService.obtener`, `HistorialService.verificar` | `create_prediction_log`, `get_company_history`, `get_prediction_by_id`, `verify_prediction` | Se registran fecha y hora, categoría, confianza, tiempo y advertencia; **nunca la imagen** (Ley 1581 de 2012). ID entero positivo; `skip ≥ 0`, `1 ≤ limit ≤ 100`; categoría confirmada dentro de las 5 clases; solo registros de la empresa del usuario. |
+| **RF-03** Panel estadístico | Alta | `GET /stats` | `EstadisticasService.resumen` | `get_company_id_for_user`, `get_prediction_stats` | Métricas calculadas solo con los registros de la empresa: total, cantidad y porcentaje por categoría, confianza promedio, tiempo promedio y advertencias. |
+
+> RF-01 y RF-02 comparten el endpoint `POST /predict`: una sola clasificación produce el resultado (RF-01) y el registro en el historial (RF-02). La guía lo permite ("varios RF pueden compartir componentes").
+>
+> **Ajuste de alcance de RF-03:** la "evolución de las consultas en el tiempo" queda fuera del alcance de este corte. El panel presenta la cantidad y la distribución por categoría.
+
+Endpoints de soporte (no son RF, pero los habilitan): `POST /register-company` y `GET /company-info` → `EmpresaService`.
+
+### 6.3 Pruebas unitarias de los servicios
+
+Las pruebas de `backend/tests/test_services.py` sustituyen el repositorio por uno simulado y el modelo por un predictor falso, así que no abren conexiones a la base de datos ni cargan TensorFlow:
+
+```bash
+cd backend
+python -m pytest tests -v
+```

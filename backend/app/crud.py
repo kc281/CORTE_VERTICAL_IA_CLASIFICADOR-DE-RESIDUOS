@@ -116,3 +116,37 @@ def verify_prediction(db: Session, prediction_id: int, company_id: int, categori
 def get_company_details(db: Session, company_id: int):
     """Obtiene el registro completo de una empresa por su ID."""
     return db.query(models.Company).filter(models.Company.id == company_id).first()
+
+class PredictionRepository:
+    """Repositorio ligado a una sesión de BD.
+
+    Los servicios dependen de esta interfaz (no de SQLAlchemy ni de la sesión), por lo
+    que en las pruebas unitarias se sustituye por un repositorio simulado.
+    """
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_company_id_for_user(self, user_id: str):
+        return get_company_id_for_user(self.db, user_id)
+
+    def create_prediction_log(self, **datos) -> models.PredictionLog:
+        return create_prediction_log(self.db, **datos)
+
+    def get_prediction_stats(self, company_id: int) -> dict:
+        return get_prediction_stats(self.db, company_id)
+
+    def get_prediction_by_id(self, prediction_id: int, company_id: int):
+        return get_prediction_by_id(self.db, prediction_id, company_id)
+
+    def get_company_history(self, company_id: int, skip: int, limit: int):
+        return get_company_history(self.db, company_id, skip, limit)
+
+    def verify_prediction(self, prediction_id: int, company_id: int, categoria_correcta: str):
+        return verify_prediction(self.db, prediction_id, company_id, categoria_correcta)
+
+    def create_company_and_member(self, company_name: str, user_id: str):
+        return create_company_and_member(self.db, company_name, user_id)
+
+    def get_company_details(self, company_id: int):
+        return get_company_details(self.db, company_id)

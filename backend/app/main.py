@@ -13,6 +13,7 @@ from app.model_loader import get_model
 from app.routes import router
 from app.database import engine, Base
 from app import models
+from app.services.exceptions import ErrorNegocio
 
 # ─── Logging ─────────────────────────────────────
 logging.basicConfig(
@@ -58,6 +59,12 @@ app.include_router(router)
 
 
 # ─── Manejadores de errores  ───
+@app.exception_handler(ErrorNegocio)
+async def negocio_handler(request: Request, exc: ErrorNegocio):
+    """Traduce los errores de la capa de servicios a HTTP (400/403/404/409/500)."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
@@ -82,7 +89,7 @@ async def root():
         "app": "Clasificación de Residuos API",
         "version": "1.0.0",
         "docs": "/docs",
-        "endpoints": ["/health", "/model-info", "/predict"],
+        "endpoints": ["/health", "/model-info", "/predict", "/history", "/predict/{id}", "/stats"],
     }
 
 

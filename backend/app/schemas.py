@@ -1,5 +1,5 @@
 """Modelos Pydantic de request/response (contrato con el frontend)."""
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -26,6 +26,7 @@ class PredictionResponse(BaseModel):
     modelo: str
     tiempo_inferencia_ms: int
     timestamp: str
+    id_prediccion: Optional[int] = None  # ID real del registro guardado (RF-02)
 
 
 class ErrorResponse(BaseModel):
