@@ -5,6 +5,8 @@ excepciones. `app/main.py` las traduce a respuestas HTTP con un único manejador
 usando el atributo `status_code` y el mensaje (`detail`) de cada una.
 """
 
+from typing import Optional
+
 
 class ErrorNegocio(Exception):
     """Base de los errores esperados del dominio (distinguibles de un fallo interno)."""
@@ -12,7 +14,7 @@ class ErrorNegocio(Exception):
     status_code = 400
     detail = "Solicitud inválida."
 
-    def __init__(self, detail: str | None = None):
+    def __init__(self, detail: Optional[str] = None):
         if detail:
             self.detail = detail
         super().__init__(self.detail)

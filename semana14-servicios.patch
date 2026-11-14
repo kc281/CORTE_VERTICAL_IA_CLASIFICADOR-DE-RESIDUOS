@@ -1,0 +1,950 @@
+From b06cbe11264151ff1ae20801cf3548fcf7ca7a42 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 14 Nov 2026 16:50:52 +0000
+Subject: [PATCH] Capa de servicios por RF (Semana 14): API -> Servicio ->
+ Repositorio
+
+- app/services: ClasificacionService (RF-01 + escritura RF-02), HistorialService (RF-02),
+  EstadisticasService (RF-03), EmpresaService (soporte) y excepciones de negocio.
+- routes.py delega en los servicios; main.py traduce los errores de negocio a HTTP.
+- crud.PredictionRepository permite inyectar el repositorio y simularlo en pruebas.
+- POST /predict ya no responde 200 si falla el guardado y retorna id_prediccion.
+- Pruebas unitarias de servicios sin BD (tests/test_services.py).
+- README: tabla RF -> endpoint -> servicio -> repositorio.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01VkkZb9X4HCziZLLpn4iNdt
+---
+ README.md                                     |  39 ++-
+ backend/app/crud.py                           |  36 ++-
+ backend/app/main.py                           |   9 +-
+ backend/app/routes.py                         | 239 ++++++++----------
+ backend/app/schemas.py                        |   3 +-
+ backend/app/services/__init__.py              |  10 +
+ backend/app/services/clasificacion_service.py |  56 ++++
+ backend/app/services/empresa_service.py       |  40 +++
+ backend/app/services/estadisticas_service.py  |  37 +++
+ backend/app/services/exceptions.py            |  53 ++++
+ backend/app/services/historial_service.py     |  60 +++++
+ backend/requirements-dev.txt                  |   1 +
+ backend/tests/__init__.py                     |   0
+ backend/tests/test_services.py                | 162 ++++++++++++
+ 14 files changed, 606 insertions(+), 139 deletions(-)
+ create mode 100644 backend/app/services/__init__.py
+ create mode 100644 backend/app/services/clasificacion_service.py
+ create mode 100644 backend/app/services/empresa_service.py
+ create mode 100644 backend/app/services/estadisticas_service.py
+ create mode 100644 backend/app/services/exceptions.py
+ create mode 100644 backend/app/services/historial_service.py
+ create mode 100644 backend/requirements-dev.txt
+ create mode 100644 backend/tests/__init__.py
+ create mode 100644 backend/tests/test_services.py
+
+diff --git a/README.md b/README.md
+index d2a1922..85eaa13 100644
+--- a/README.md
++++ b/README.md
+@@ -185,4 +185,41 @@ Para validar la arquitectura, se inyectaron datos de prueba directamente en Supa
+ - **6 Usuarios (2 por empresa):** Con roles de `admin`, `supervisor` y `employee`.
+ - **60 Predicciones:** 20 registros por cada empresa con fechas y confianzas aleatorias.
+ 
+----
+\ No newline at end of file
++---
++---
++
++## 🧩 6. Lógica de negocio y API del corte vertical (Guía Semana 14)
++
++### 6.1 Arquitectura en capas del backend
++
++Flujo de cada petición: **API → Servicio de aplicación → Repositorio → Base de datos**.
++
++| Capa | Ubicación | Responsabilidad |
++| :--- | :--- | :--- |
++| API (controladores) | `backend/app/routes.py` | Recibe HTTP, valida el formato (imagen, tipos) y delega en el servicio. No contiene reglas ni SQL. |
++| Servicios de aplicación | `backend/app/services/` | Reglas de negocio de cada RF. No dependen de HTTP ni de SQLAlchemy: reciben el repositorio por inyección. |
++| Errores de negocio | `backend/app/services/exceptions.py` | `EntradaInvalida` (400), `UsuarioSinEmpresa` (403), `RecursoNoEncontrado` (404), `Conflicto` (409), `ErrorInferencia` / `ErrorPersistencia` / `ErrorConsulta` (500). `app/main.py` los traduce a HTTP con `{"detail": "..."}`. |
++| Repositorio | `backend/app/crud.py` (`PredictionRepository`) | Encapsula todas las consultas SQLAlchemy y las transacciones (`commit` / `rollback`). |
++
++### 6.2 Servicios y endpoints por requerimiento funcional
++
++| RF | Prioridad | Endpoint(s) | Servicio y método | Métodos del repositorio | Reglas / condiciones |
++| :--- | :--- | :--- | :--- | :--- | :--- |
++| **RF-01** Clasificar un residuo a partir de una imagen (5 categorías) | Alta | `POST /predict` | `ClasificacionService.clasificar` | `get_company_id_for_user`, `create_prediction_log` | Imagen JPG/PNG/WEBP ≤ 5 MB y decodificable; el usuario debe pertenecer a una empresa; advertencia si la confianza es < 0,60; la respuesta exitosa se envía **después** de confirmar el guardado. |
++| **RF-02** Almacenar y consultar el historial de clasificaciones | Alta | Escritura: `POST /predict` (compartido con RF-01)<br>Consulta: `GET /history`, `GET /predict/{prediction_id}`<br>Verificación humana: `PATCH /predict/{prediction_id}/verify` | `ClasificacionService.clasificar` (escritura)<br>`HistorialService.listar`, `HistorialService.obtener`, `HistorialService.verificar` | `create_prediction_log`, `get_company_history`, `get_prediction_by_id`, `verify_prediction` | Se registran fecha y hora, categoría, confianza, tiempo y advertencia; **nunca la imagen** (Ley 1581 de 2012). ID entero positivo; `skip ≥ 0`, `1 ≤ limit ≤ 100`; categoría confirmada dentro de las 5 clases; solo registros de la empresa del usuario. |
++| **RF-03** Panel estadístico | Alta | `GET /stats` | `EstadisticasService.resumen` | `get_company_id_for_user`, `get_prediction_stats` | Métricas calculadas solo con los registros de la empresa: total, cantidad y porcentaje por categoría, confianza promedio, tiempo promedio y advertencias. |
++
++> RF-01 y RF-02 comparten el endpoint `POST /predict`: una sola clasificación produce el resultado (RF-01) y el registro en el historial (RF-02). La guía lo permite ("varios RF pueden compartir componentes").
++>
++> **Ajuste de alcance de RF-03:** la "evolución de las consultas en el tiempo" queda fuera del alcance de este corte. El panel presenta la cantidad y la distribución por categoría.
++
++Endpoints de soporte (no son RF, pero los habilitan): `POST /register-company` y `GET /company-info` → `EmpresaService`.
++
++### 6.3 Pruebas unitarias de los servicios
++
++Las pruebas de `backend/tests/test_services.py` sustituyen el repositorio por uno simulado y el modelo por un predictor falso, así que no abren conexiones a la base de datos ni cargan TensorFlow:
++
++```bash
++cd backend
++python -m pytest tests -v
++```
+diff --git a/backend/app/crud.py b/backend/app/crud.py
+index b58a679..a55ece0 100644
+--- a/backend/app/crud.py
++++ b/backend/app/crud.py
+@@ -115,4 +115,38 @@ def verify_prediction(db: Session, prediction_id: int, company_id: int, categori
+ 
+ def get_company_details(db: Session, company_id: int):
+     """Obtiene el registro completo de una empresa por su ID."""
+-    return db.query(models.Company).filter(models.Company.id == company_id).first()
+\ No newline at end of file
++    return db.query(models.Company).filter(models.Company.id == company_id).first()
++
++class PredictionRepository:
++    """Repositorio ligado a una sesión de BD.
++
++    Los servicios dependen de esta interfaz (no de SQLAlchemy ni de la sesión), por lo
++    que en las pruebas unitarias se sustituye por un repositorio simulado.
++    """
++
++    def __init__(self, db: Session):
++        self.db = db
++
++    def get_company_id_for_user(self, user_id: str):
++        return get_company_id_for_user(self.db, user_id)
++
++    def create_prediction_log(self, **datos) -> models.PredictionLog:
++        return create_prediction_log(self.db, **datos)
++
++    def get_prediction_stats(self, company_id: int) -> dict:
++        return get_prediction_stats(self.db, company_id)
++
++    def get_prediction_by_id(self, prediction_id: int, company_id: int):
++        return get_prediction_by_id(self.db, prediction_id, company_id)
++
++    def get_company_history(self, company_id: int, skip: int, limit: int):
++        return get_company_history(self.db, company_id, skip, limit)
++
++    def verify_prediction(self, prediction_id: int, company_id: int, categoria_correcta: str):
++        return verify_prediction(self.db, prediction_id, company_id, categoria_correcta)
++
++    def create_company_and_member(self, company_name: str, user_id: str):
++        return create_company_and_member(self.db, company_name, user_id)
++
++    def get_company_details(self, company_id: int):
++        return get_company_details(self.db, company_id)
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 59e2fdc..7613c21 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -13,6 +13,7 @@ from app.model_loader import get_model
+ from app.routes import router
+ from app.database import engine, Base
+ from app import models
++from app.services.exceptions import ErrorNegocio
+ 
+ # ─── Logging ─────────────────────────────────────
+ logging.basicConfig(
+@@ -58,6 +59,12 @@ app.include_router(router)
+ 
+ 
+ # ─── Manejadores de errores  ───
++@app.exception_handler(ErrorNegocio)
++async def negocio_handler(request: Request, exc: ErrorNegocio):
++    """Traduce los errores de la capa de servicios a HTTP (400/403/404/409/500)."""
++    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
++
++
+ @app.exception_handler(RequestValidationError)
+ async def validation_handler(request: Request, exc: RequestValidationError):
+     return JSONResponse(
+@@ -82,7 +89,7 @@ async def root():
+         "app": "Clasificación de Residuos API",
+         "version": "1.0.0",
+         "docs": "/docs",
+-        "endpoints": ["/health", "/model-info", "/predict"],
++        "endpoints": ["/health", "/model-info", "/predict", "/history", "/predict/{id}", "/stats"],
+     }
+ 
+ 
+diff --git a/backend/app/routes.py b/backend/app/routes.py
+index 45af12e..1056b97 100644
+--- a/backend/app/routes.py
++++ b/backend/app/routes.py
+@@ -1,25 +1,63 @@
+-"""Endpoints del API (Capa de Controladores)."""
+-import logging
+-from datetime import datetime, timezone
+-from fastapi import APIRouter, File, HTTPException, UploadFile, status, Depends
++"""Endpoints del API (capa de controladores).
++
++Cada endpoint solo recibe HTTP, valida el formato de la entrada y delega en un
++servicio de aplicación (app/services). Las reglas de negocio viven en los servicios
++y el SQL en el repositorio (app/crud.py).
++
++    RF-01 Clasificar residuo ........ POST  /predict                 -> ClasificacionService.clasificar
++    RF-02 Historial de consultas .... (escritura en POST /predict)   -> ClasificacionService.clasificar
++                                      GET   /history                 -> HistorialService.listar
++                                      GET   /predict/{prediction_id} -> HistorialService.obtener
++                                      PATCH /predict/{id}/verify     -> HistorialService.verificar
++    RF-03 Panel estadístico ......... GET   /stats                   -> EstadisticasService.resumen
++
++Los errores de negocio (app/services/exceptions.py) se traducen a HTTP en app/main.py.
++"""
++from fastapi import APIRouter, Depends, File, UploadFile
++from pydantic import BaseModel
+ from sqlalchemy.orm import Session
+-from pydantic import BaseModel # <-- NUEVO IMPORT
+ 
+ from app import config
++from app.auth import get_current_user
++from app.crud import PredictionRepository
++from app.database import get_db
+ from app.model_loader import predict as predict_model
+ from app.schemas import HealthResponse, ModelInfoResponse, PredictionResponse
++from app.services import (
++    ClasificacionService, EmpresaService, EstadisticasService, HistorialService,
++)
+ from app.utils import validate_image
+-from app.database import get_db
+-from app.auth import get_current_user
+-from app import crud
+ 
+-logger = logging.getLogger(__name__)
+ router = APIRouter()
+ 
++
++# ─── Inyección de dependencias: sesión -> repositorio -> servicio ───
++def get_repository(db: Session = Depends(get_db)) -> PredictionRepository:
++    return PredictionRepository(db)
++
++
++def get_clasificacion_service(repo=Depends(get_repository)) -> ClasificacionService:
++    return ClasificacionService(repo, predict_model)
++
++
++def get_historial_service(repo=Depends(get_repository)) -> HistorialService:
++    return HistorialService(repo)
++
++
++def get_estadisticas_service(repo=Depends(get_repository)) -> EstadisticasService:
++    return EstadisticasService(repo)
++
++
++def get_empresa_service(repo=Depends(get_repository)) -> EmpresaService:
++    return EmpresaService(repo)
++
++
++# ─── Sistema ─────────────────────────────────────
+ @router.get("/health", response_model=HealthResponse, tags=["Sistema"])
+ async def health() -> HealthResponse:
+     return HealthResponse(status="ok", version="1.0.0")
+ 
++
+ @router.get("/model-info", response_model=ModelInfoResponse, tags=["Sistema"])
+ async def model_info() -> ModelInfoResponse:
+     return ModelInfoResponse(
+@@ -27,153 +65,84 @@ async def model_info() -> ModelInfoResponse:
+         clases_etiquetas=config.CLASSES_LABELS_ES, input_size=config.INPUT_SIZE, version="1.0.0",
+     )
+ 
+-@router.post("/predict", response_model=PredictionResponse, tags=["Clasificación"])
++
++# ─── RF-01 (+ escritura RF-02): clasificar un residuo ───
++@router.post("/predict", response_model=PredictionResponse, tags=["RF-01 Clasificación"])
+ async def predict_endpoint(
+-    file: UploadFile = File(...), 
+-    db: Session = Depends(get_db),
+-    current_user: dict = Depends(get_current_user)
++    file: UploadFile = File(...),
++    service: ClasificacionService = Depends(get_clasificacion_service),
++    current_user: dict = Depends(get_current_user),
+ ) -> PredictionResponse:
+-    
+     image = await validate_image(file)
++    return PredictionResponse(**service.clasificar(current_user["user_id"], image))
+ 
+-    try:
+-        result = predict_model(image)
+-    except Exception:
+-        logger.exception("Error durante la inferencia")
+-        raise HTTPException(status_code=500, detail="Ocurrió un error interno en la IA.")
+-
+-    result["timestamp"] = datetime.now(timezone.utc).isoformat()
+-
+-    # Buscar empresa del usuario
+-    user_uuid = current_user["user_id"]
+-    company_id = crud.get_company_id_for_user(db, user_uuid)
+-    
+-    if not company_id:
+-        raise HTTPException(status_code=403, detail="El usuario no está asociado a ninguna empresa.")
+-
+-    try:
+-        crud.create_prediction_log(
+-            db=db, company_id=company_id, user_id=user_uuid,
+-            clase_predicha=result["clase"], confianza=result["confianza"],
+-            tiempo_inferencia=result["tiempo_inferencia_ms"], advertencia_activada=result["advertencia"]
+-        )
+-    except Exception as e:
+-        logger.error(f"La predicción fue exitosa, pero falló el guardado: {e}")
+-
+-    return PredictionResponse(**result)
+-
+-@router.get("/stats", tags=["Estadísticas"])
+-async def get_stats(
+-    db: Session = Depends(get_db),
+-    current_user: dict = Depends(get_current_user)
++
++# ─── RF-02: consultar el historial ───
++@router.get("/history", tags=["RF-02 Historial"])
++async def get_history(
++    skip: int = 0,
++    limit: int = 50,
++    service: HistorialService = Depends(get_historial_service),
++    current_user: dict = Depends(get_current_user),
+ ):
+-    user_uuid = current_user["user_id"]
+-    company_id = crud.get_company_id_for_user(db, user_uuid)
+-    
+-    if not company_id:
+-        raise HTTPException(status_code=403, detail="El usuario no está asociado a ninguna empresa.")
+-
+-    try:
+-        return crud.get_prediction_stats(db, company_id)
+-    except Exception:
+-        logger.exception("Error obteniendo estadísticas")
+-        raise HTTPException(status_code=500, detail="Error al calcular las estadísticas.")
++    """Historial paginado de clasificaciones de la empresa (más reciente primero)."""
++    return service.listar(current_user["user_id"], skip, limit)
+ 
+-@router.get("/company-info", tags=["Empresas"])
+-async def get_company_info(
+-    db: Session = Depends(get_db),
+-    current_user: dict = Depends(get_current_user)
++
++@router.get("/predict/{prediction_id}", tags=["RF-02 Historial"])
++async def get_prediction_by_id(
++    prediction_id: int,
++    service: HistorialService = Depends(get_historial_service),
++    current_user: dict = Depends(get_current_user),
+ ):
+-    """Retorna el nombre de la empresa del usuario autenticado."""
+-    user_uuid = current_user["user_id"]
+-    company_id = crud.get_company_id_for_user(db, user_uuid)
+-    
+-    if not company_id:
+-        raise HTTPException(status_code=403, detail="Usuario sin empresa asociada.")
++    """Un registro del historial por su ID."""
++    return service.obtener(current_user["user_id"], prediction_id)
+ 
+-    company = crud.get_company_details(db, company_id)
+-    if not company:
+-        raise HTTPException(status_code=404, detail="Empresa no encontrada.")
+ 
+-    return {"company_name": company.name, "company_id": company.id}
++class VerifyPredictionRequest(BaseModel):
++    categoria_correcta: str
+ 
+-@router.get("/predict/{prediction_id}", tags=["Clasificación"])
+-async def get_prediction_by_id(
+-    prediction_id: int, 
+-    db: Session = Depends(get_db),
+-    current_user: dict = Depends(get_current_user)
++
++@router.patch("/predict/{prediction_id}/verify", tags=["RF-02 Historial"])
++async def verify_prediction(
++    prediction_id: int,
++    request: VerifyPredictionRequest,
++    service: HistorialService = Depends(get_historial_service),
++    current_user: dict = Depends(get_current_user),
+ ):
+-    user_uuid = current_user["user_id"]
+-    company_id = crud.get_company_id_for_user(db, user_uuid)
+-    
+-    log = crud.get_prediction_by_id(db, prediction_id, company_id)
+-    if not log:
+-        raise HTTPException(status_code=404, detail="Registro no encontrado o no pertenece a su empresa")
+-    return log
++    """Permite a un usuario corregir o confirmar la clasificación de la IA."""
++    log = service.verificar(current_user["user_id"], prediction_id, request.categoria_correcta)
++    return {"message": "Predicción verificada correctamente", "categoria_confirmada": log.categoria_confirmada}
++
+ 
++# ─── RF-03: panel estadístico ───
++@router.get("/stats", tags=["RF-03 Estadísticas"])
++async def get_stats(
++    service: EstadisticasService = Depends(get_estadisticas_service),
++    current_user: dict = Depends(get_current_user),
++):
++    return service.resumen(current_user["user_id"])
+ 
++
++# ─── Soporte: empresas ───
+ class CompanyCreate(BaseModel):
+     name: str
+ 
++
+ @router.post("/register-company", tags=["Empresas"])
+ async def register_company(
+     company_data: CompanyCreate,
+-    db: Session = Depends(get_db),
+-    current_user: dict = Depends(get_current_user)
++    service: EmpresaService = Depends(get_empresa_service),
++    current_user: dict = Depends(get_current_user),
+ ):
+     """Crea una empresa y asocia al usuario autenticado como administrador."""
+-    user_uuid = current_user["user_id"]
+-    
+-    # Verificar si el usuario ya tiene empresa para evitar duplicados
+-    existing_company = crud.get_company_id_for_user(db, user_uuid)
+-    if existing_company:
+-        raise HTTPException(status_code=400, detail="El usuario ya pertenece a una empresa.")
+-
+-    try:
+-        new_company = crud.create_company_and_member(db, company_data.name, user_uuid)
+-        return {"message": "Empresa creada exitosamente", "company_id": new_company.id}
+-    except Exception:
+-        logger.exception("Error creando empresa")
+-        raise HTTPException(status_code=500, detail="Error al registrar la empresa.")
+-
+-@router.get("/history", tags=["Historial"])
+-async def get_history(
+-    skip: int = 0, 
+-    limit: int = 50,
+-    db: Session = Depends(get_db),
+-    current_user: dict = Depends(get_current_user)
+-):
+-    """Obtiene el historial paginado de clasificaciones de la empresa."""
+-    user_uuid = current_user["user_id"]
+-    company_id = crud.get_company_id_for_user(db, user_uuid)
+-    
+-    if not company_id:
+-        raise HTTPException(status_code=403, detail="Usuario sin empresa asociada.")
++    return service.registrar(current_user["user_id"], company_data.name)
+ 
+-    return crud.get_company_history(db, company_id, skip, limit)
+-
+-from pydantic import BaseModel
+-
+-class VerifyPredictionRequest(BaseModel):
+-    categoria_correcta: str
+ 
+-@router.patch("/predict/{prediction_id}/verify", tags=["Historial"])
+-async def verify_prediction(
+-    prediction_id: int,
+-    request: VerifyPredictionRequest,
+-    db: Session = Depends(get_db),
+-    current_user: dict = Depends(get_current_user)
++@router.get("/company-info", tags=["Empresas"])
++async def get_company_info(
++    service: EmpresaService = Depends(get_empresa_service),
++    current_user: dict = Depends(get_current_user),
+ ):
+-    """Permite a un usuario corregir o confirmar la clasificación de la IA."""
+-    user_uuid = current_user["user_id"]
+-    company_id = crud.get_company_id_for_user(db, user_uuid)
+-    
+-    if not company_id:
+-        raise HTTPException(status_code=403, detail="Usuario sin empresa asociada.")
+-
+-    log = crud.verify_prediction(db, prediction_id, company_id, request.categoria_correcta)
+-    
+-    if not log:
+-        raise HTTPException(status_code=404, detail="Registro no encontrado o no pertenece a su empresa.")
+-        
+-    return {"message": "Predicción verificada correctamente", "categoria_confirmada": log.categoria_confirmada}
+\ No newline at end of file
++    """Retorna el nombre de la empresa del usuario autenticado."""
++    return service.informacion(current_user["user_id"])
+diff --git a/backend/app/schemas.py b/backend/app/schemas.py
+index 53c2002..ffed6b8 100644
+--- a/backend/app/schemas.py
++++ b/backend/app/schemas.py
+@@ -1,5 +1,5 @@
+ """Modelos Pydantic de request/response (contrato con el frontend)."""
+-from typing import Dict, List
++from typing import Dict, List, Optional
+ from pydantic import BaseModel, Field
+ 
+ 
+@@ -26,6 +26,7 @@ class PredictionResponse(BaseModel):
+     modelo: str
+     tiempo_inferencia_ms: int
+     timestamp: str
++    id_prediccion: Optional[int] = None  # ID real del registro guardado (RF-02)
+ 
+ 
+ class ErrorResponse(BaseModel):
+diff --git a/backend/app/services/__init__.py b/backend/app/services/__init__.py
+new file mode 100644
+index 0000000..03b47c6
+--- /dev/null
++++ b/backend/app/services/__init__.py
+@@ -0,0 +1,10 @@
++"""Capa de servicios de aplicación: reglas de negocio de cada RF.
++
++Flujo: API (routes.py) -> Servicio (este paquete) -> Repositorio (crud.py) -> BD.
++"""
++from app.services.clasificacion_service import ClasificacionService
++from app.services.empresa_service import EmpresaService
++from app.services.estadisticas_service import EstadisticasService
++from app.services.historial_service import HistorialService
++
++__all__ = ["ClasificacionService", "HistorialService", "EstadisticasService", "EmpresaService"]
+diff --git a/backend/app/services/clasificacion_service.py b/backend/app/services/clasificacion_service.py
+new file mode 100644
+index 0000000..5029e78
+--- /dev/null
++++ b/backend/app/services/clasificacion_service.py
+@@ -0,0 +1,56 @@
++"""Servicio de aplicación de RF-01 (clasificar un residuo) y escritura de RF-02.
++
++Caso de uso: clasificar(user_id, imagen)
++  1. Verificar que el usuario pertenezca a una empresa (aislamiento multiempresa).
++  2. Ejecutar la inferencia del modelo (5 categorías).
++     Regla: si la confianza es < 0.60 se activa la advertencia (la marca el predictor
++     con config.LOW_CONFIDENCE_THRESHOLD).
++  3. Registrar en el historial (RF-02): fecha, categoría, confianza, tiempo y advertencia.
++     Regla de privacidad (Ley 1581 de 2012): NUNCA se guarda la imagen.
++  4. Retornar el resultado solo después de confirmar la escritura.
++"""
++import logging
++from datetime import datetime, timezone
++from typing import Callable, Dict
++
++from app.services.exceptions import ErrorInferencia, ErrorPersistencia, UsuarioSinEmpresa
++
++logger = logging.getLogger(__name__)
++
++
++class ClasificacionService:
++    def __init__(self, repo, predictor: Callable[[object], Dict]):
++        # repo: objeto con get_company_id_for_user y create_prediction_log
++        # predictor: función imagen -> dict (app.model_loader.predict en producción)
++        self.repo = repo
++        self.predictor = predictor
++
++    def clasificar(self, user_id: str, imagen) -> Dict:
++        company_id = self.repo.get_company_id_for_user(user_id)
++        if company_id is None:
++            raise UsuarioSinEmpresa()
++
++        try:
++            resultado = self.predictor(imagen)
++        except Exception as exc:
++            logger.exception("Error durante la inferencia")
++            raise ErrorInferencia() from exc
++
++        try:
++            log = self.repo.create_prediction_log(
++                company_id=company_id,
++                user_id=user_id,
++                clase_predicha=resultado["clase"],
++                confianza=resultado["confianza"],
++                tiempo_inferencia=resultado["tiempo_inferencia_ms"],
++                advertencia_activada=resultado["advertencia"],
++            )
++        except Exception as exc:
++            logger.exception("La inferencia fue exitosa, pero falló el guardado del historial")
++            raise ErrorPersistencia() from exc
++
++        return {
++            **resultado,
++            "id_prediccion": log.id,
++            "timestamp": datetime.now(timezone.utc).isoformat(),
++        }
+diff --git a/backend/app/services/empresa_service.py b/backend/app/services/empresa_service.py
+new file mode 100644
+index 0000000..517e1ba
+--- /dev/null
++++ b/backend/app/services/empresa_service.py
+@@ -0,0 +1,40 @@
++"""Servicio de soporte: empresas (no es uno de los tres RF, pero los habilita).
++
++Todos los RF exigen que el usuario pertenezca a una empresa; este servicio
++registra la empresa y devuelve sus datos.
++"""
++import logging
++from typing import Dict
++
++from app.services.exceptions import (
++    Conflicto, EntradaInvalida, ErrorPersistencia, RecursoNoEncontrado, UsuarioSinEmpresa,
++)
++
++logger = logging.getLogger(__name__)
++
++
++class EmpresaService:
++    def __init__(self, repo):
++        self.repo = repo
++
++    def registrar(self, user_id: str, nombre: str) -> Dict:
++        nombre = (nombre or "").strip()
++        if not nombre:
++            raise EntradaInvalida("El nombre de la empresa es obligatorio.")
++        if self.repo.get_company_id_for_user(user_id) is not None:
++            raise Conflicto("El usuario ya pertenece a una empresa.")
++        try:
++            empresa = self.repo.create_company_and_member(nombre, user_id)
++        except Exception as exc:
++            logger.exception("Error creando empresa")
++            raise ErrorPersistencia("Error al registrar la empresa.") from exc
++        return {"message": "Empresa creada exitosamente", "company_id": empresa.id}
++
++    def informacion(self, user_id: str) -> Dict:
++        company_id = self.repo.get_company_id_for_user(user_id)
++        if company_id is None:
++            raise UsuarioSinEmpresa()
++        empresa = self.repo.get_company_details(company_id)
++        if empresa is None:
++            raise RecursoNoEncontrado("Empresa no encontrada.")
++        return {"company_name": empresa.name, "company_id": empresa.id}
+diff --git a/backend/app/services/estadisticas_service.py b/backend/app/services/estadisticas_service.py
+new file mode 100644
+index 0000000..a686622
+--- /dev/null
++++ b/backend/app/services/estadisticas_service.py
+@@ -0,0 +1,37 @@
++"""Servicio de aplicación de RF-03 (panel estadístico).
++
++Caso de uso: resumen(user_id)
++  - Verifica la empresa del usuario y calcula, SOLO con sus registros:
++    total de consultas, distribución por categoría, confianza promedio,
++    tiempo de inferencia promedio y total de advertencias de baja confianza.
++  - Agrega el porcentaje de cada categoría sobre el total.
++"""
++import logging
++from typing import Dict
++
++from app.services.exceptions import ErrorConsulta, UsuarioSinEmpresa
++
++logger = logging.getLogger(__name__)
++
++
++class EstadisticasService:
++    def __init__(self, repo):
++        self.repo = repo
++
++    def resumen(self, user_id: str) -> Dict:
++        company_id = self.repo.get_company_id_for_user(user_id)
++        if company_id is None:
++            raise UsuarioSinEmpresa()
++
++        try:
++            stats = self.repo.get_prediction_stats(company_id)
++        except Exception as exc:
++            logger.exception("Error obteniendo estadísticas")
++            raise ErrorConsulta() from exc
++
++        total = stats["total_consultas"]
++        stats["distribucion_clases"] = [
++            {**fila, "porcentaje": round(fila["cantidad"] * 100 / total, 2) if total else 0.0}
++            for fila in stats["distribucion_clases"]
++        ]
++        return stats
+diff --git a/backend/app/services/exceptions.py b/backend/app/services/exceptions.py
+new file mode 100644
+index 0000000..0c5049b
+--- /dev/null
++++ b/backend/app/services/exceptions.py
+@@ -0,0 +1,53 @@
++"""Excepciones de negocio de la capa de servicios.
++
++Los servicios no conocen HTTP: comunican el resultado del caso de uso con estas
++excepciones. `app/main.py` las traduce a respuestas HTTP con un único manejador,
++usando el atributo `status_code` y el mensaje (`detail`) de cada una.
++"""
++
++
++class ErrorNegocio(Exception):
++    """Base de los errores esperados del dominio (distinguibles de un fallo interno)."""
++
++    status_code = 400
++    detail = "Solicitud inválida."
++
++    def __init__(self, detail: str | None = None):
++        if detail:
++            self.detail = detail
++        super().__init__(self.detail)
++
++
++class EntradaInvalida(ErrorNegocio):
++    status_code = 400
++    detail = "Los datos de entrada no son válidos."
++
++
++class UsuarioSinEmpresa(ErrorNegocio):
++    status_code = 403
++    detail = "El usuario no está asociado a ninguna empresa."
++
++
++class RecursoNoEncontrado(ErrorNegocio):
++    status_code = 404
++    detail = "Registro no encontrado o no pertenece a su empresa."
++
++
++class Conflicto(ErrorNegocio):
++    status_code = 409
++    detail = "El recurso ya existe."
++
++
++class ErrorInferencia(ErrorNegocio):
++    status_code = 500
++    detail = "Ocurrió un error interno en la IA."
++
++
++class ErrorPersistencia(ErrorNegocio):
++    status_code = 500
++    detail = "No se pudo guardar el registro de la clasificación."
++
++
++class ErrorConsulta(ErrorNegocio):
++    status_code = 500
++    detail = "Error al calcular las estadísticas."
+diff --git a/backend/app/services/historial_service.py b/backend/app/services/historial_service.py
+new file mode 100644
+index 0000000..6e012e8
+--- /dev/null
++++ b/backend/app/services/historial_service.py
+@@ -0,0 +1,60 @@
++"""Servicio de aplicación de RF-02 (consultar el historial de clasificaciones).
++
++La escritura del historial ocurre en ClasificacionService (RF-01 y RF-02 comparten
++el flujo de POST /predict). Este servicio cubre las consultas y la verificación humana.
++
++Casos de uso:
++  - listar(user_id, skip, limit): historial paginado de la empresa del usuario.
++  - obtener(user_id, prediction_id): un registro por ID; distingue encontrado de ausente.
++  - verificar(user_id, prediction_id, categoria): guarda la categoría confirmada por un humano.
++"""
++from typing import Dict
++
++from app import config
++from app.services.exceptions import EntradaInvalida, RecursoNoEncontrado, UsuarioSinEmpresa
++
++LIMITE_MAXIMO = 100
++
++
++class HistorialService:
++    def __init__(self, repo):
++        self.repo = repo
++
++    def _company_id(self, user_id: str) -> int:
++        company_id = self.repo.get_company_id_for_user(user_id)
++        if company_id is None:
++            raise UsuarioSinEmpresa()
++        return company_id
++
++    @staticmethod
++    def _validar_id(prediction_id: int) -> None:
++        if prediction_id is None or prediction_id <= 0:
++            raise EntradaInvalida("El ID de la predicción debe ser un entero positivo.")
++
++    def listar(self, user_id: str, skip: int = 0, limit: int = 50) -> Dict:
++        if skip < 0:
++            raise EntradaInvalida("El parámetro 'skip' no puede ser negativo.")
++        if not 1 <= limit <= LIMITE_MAXIMO:
++            raise EntradaInvalida(f"El parámetro 'limit' debe estar entre 1 y {LIMITE_MAXIMO}.")
++        company_id = self._company_id(user_id)
++        return self.repo.get_company_history(company_id, skip, limit)
++
++    def obtener(self, user_id: str, prediction_id: int):
++        self._validar_id(prediction_id)
++        company_id = self._company_id(user_id)
++        log = self.repo.get_prediction_by_id(prediction_id, company_id)
++        if log is None:
++            raise RecursoNoEncontrado()
++        return log
++
++    def verificar(self, user_id: str, prediction_id: int, categoria: str):
++        self._validar_id(prediction_id)
++        if categoria not in config.CLASSES:
++            raise EntradaInvalida(
++                f"Categoría no válida. Use una de: {', '.join(config.CLASSES)}."
++            )
++        company_id = self._company_id(user_id)
++        log = self.repo.verify_prediction(prediction_id, company_id, categoria)
++        if log is None:
++            raise RecursoNoEncontrado()
++        return log
+diff --git a/backend/requirements-dev.txt b/backend/requirements-dev.txt
+new file mode 100644
+index 0000000..039d26e
+--- /dev/null
++++ b/backend/requirements-dev.txt
+@@ -0,0 +1 @@
++pytest>=8.0
+diff --git a/backend/tests/__init__.py b/backend/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/backend/tests/test_services.py b/backend/tests/test_services.py
+new file mode 100644
+index 0000000..44ab9a4
+--- /dev/null
++++ b/backend/tests/test_services.py
+@@ -0,0 +1,162 @@
++"""Pruebas unitarias de la capa de servicios (RF-01, RF-02, RF-03).
++
++Se sustituye el repositorio real por uno simulado (MagicMock) y el modelo de IA por
++un predictor falso: ninguna prueba abre una conexión a la base de datos ni carga
++TensorFlow. Ejecutar desde backend/:  python -m pytest tests -v
++"""
++from types import SimpleNamespace
++from unittest.mock import MagicMock
++
++import pytest
++
++from app.services import ClasificacionService, EstadisticasService, HistorialService
++from app.services.exceptions import (
++    EntradaInvalida, ErrorInferencia, ErrorPersistencia, RecursoNoEncontrado, UsuarioSinEmpresa,
++)
++
++USER = "11111111-1111-1111-1111-111111111111"
++COMPANY = 7
++
++RESULTADO_MODELO = {
++    "clase": "plastic", "clase_etiqueta": "Plástico", "confianza": 0.91,
++    "probabilidades": {"biological": 0.01, "cardboard": 0.02, "metal": 0.03,
++                       "paper": 0.03, "plastic": 0.91},
++    "color_disposicion": "blanco", "advertencia": False,
++    "modelo": "MobileNetV2", "tiempo_inferencia_ms": 120,
++}
++
++
++def repo_con_empresa(company_id=COMPANY):
++    repo = MagicMock()
++    repo.get_company_id_for_user.return_value = company_id
++    return repo
++
++
++# ─── RF-01: clasificar (y registrar en el historial, RF-02) ───
++class TestClasificacionService:
++    def test_clasificacion_valida_guarda_y_retorna_id_real(self):
++        repo = repo_con_empresa()
++        repo.create_prediction_log.return_value = SimpleNamespace(id=42)
++        service = ClasificacionService(repo, predictor=lambda img: dict(RESULTADO_MODELO))
++
++        r = service.clasificar(USER, imagen=object())
++
++        assert r["clase"] == "plastic" and r["id_prediccion"] == 42 and "timestamp" in r
++        repo.create_prediction_log.assert_called_once_with(
++            company_id=COMPANY, user_id=USER, clase_predicha="plastic",
++            confianza=0.91, tiempo_inferencia=120, advertencia_activada=False,
++        )
++
++    def test_no_se_guarda_la_imagen(self):
++        repo = repo_con_empresa()
++        repo.create_prediction_log.return_value = SimpleNamespace(id=1)
++        ClasificacionService(repo, lambda img: dict(RESULTADO_MODELO)).clasificar(USER, object())
++        campos = repo.create_prediction_log.call_args.kwargs
++        assert not any("imag" in k for k in campos)
++
++    def test_usuario_sin_empresa_no_infiere_ni_guarda(self):
++        repo = repo_con_empresa(None)
++        predictor = MagicMock()
++        with pytest.raises(UsuarioSinEmpresa):
++            ClasificacionService(repo, predictor).clasificar(USER, object())
++        predictor.assert_not_called()
++        repo.create_prediction_log.assert_not_called()
++
++    def test_fallo_del_modelo_no_guarda(self):
++        repo = repo_con_empresa()
++        predictor = MagicMock(side_effect=RuntimeError("boom"))
++        with pytest.raises(ErrorInferencia):
++            ClasificacionService(repo, predictor).clasificar(USER, object())
++        repo.create_prediction_log.assert_not_called()
++
++    def test_fallo_al_guardar_no_retorna_exito(self):
++        repo = repo_con_empresa()
++        repo.create_prediction_log.side_effect = Exception("BD caída")
++        with pytest.raises(ErrorPersistencia):
++            ClasificacionService(repo, lambda img: dict(RESULTADO_MODELO)).clasificar(USER, object())
++
++
++# ─── RF-02: consultar el historial ───
++class TestHistorialService:
++    def test_listar_filtra_por_empresa(self):
++        repo = repo_con_empresa()
++        repo.get_company_history.return_value = {"total": 0, "records": []}
++        assert HistorialService(repo).listar(USER, 0, 10) == {"total": 0, "records": []}
++        repo.get_company_history.assert_called_once_with(COMPANY, 0, 10)
++
++    @pytest.mark.parametrize("skip,limit", [(-1, 10), (0, 0), (0, 101)])
++    def test_listar_rechaza_paginacion_invalida(self, skip, limit):
++        repo = repo_con_empresa()
++        with pytest.raises(EntradaInvalida):
++            HistorialService(repo).listar(USER, skip, limit)
++        repo.get_company_history.assert_not_called()
++
++    def test_obtener_existente(self):
++        repo = repo_con_empresa()
++        registro = SimpleNamespace(id=5, clase_predicha="metal")
++        repo.get_prediction_by_id.return_value = registro
++        assert HistorialService(repo).obtener(USER, 5) is registro
++        repo.get_prediction_by_id.assert_called_once_with(5, COMPANY)
++        # La consulta solo lee: no se invoca ninguna escritura.
++        repo.create_prediction_log.assert_not_called()
++        repo.verify_prediction.assert_not_called()
++
++    def test_obtener_ausente(self):
++        repo = repo_con_empresa()
++        repo.get_prediction_by_id.return_value = None
++        with pytest.raises(RecursoNoEncontrado):
++            HistorialService(repo).obtener(USER, 999999)
++
++    @pytest.mark.parametrize("pid", [0, -3])
++    def test_obtener_id_invalido(self, pid):
++        repo = repo_con_empresa()
++        with pytest.raises(EntradaInvalida):
++            HistorialService(repo).obtener(USER, pid)
++        repo.get_prediction_by_id.assert_not_called()
++
++    def test_obtener_sin_empresa(self):
++        with pytest.raises(UsuarioSinEmpresa):
++            HistorialService(repo_con_empresa(None)).obtener(USER, 5)
++
++    def test_verificar_categoria_invalida_no_escribe(self):
++        repo = repo_con_empresa()
++        with pytest.raises(EntradaInvalida):
++            HistorialService(repo).verificar(USER, 5, "vidrio")
++        repo.verify_prediction.assert_not_called()
++
++    def test_verificar_valida(self):
++        repo = repo_con_empresa()
++        repo.verify_prediction.return_value = SimpleNamespace(categoria_confirmada="paper")
++        log = HistorialService(repo).verificar(USER, 5, "paper")
++        assert log.categoria_confirmada == "paper"
++        repo.verify_prediction.assert_called_once_with(5, COMPANY, "paper")
++
++
++# ─── RF-03: panel estadístico ───
++class TestEstadisticasService:
++    def test_resumen_calcula_porcentajes(self):
++        repo = repo_con_empresa()
++        repo.get_prediction_stats.return_value = {
++            "total_consultas": 4, "confianza_promedio_global": 0.8,
++            "tiempo_inferencia_promedio_ms": 100.0, "total_advertencias_baja_confianza": 1,
++            "distribucion_clases": [{"clase": "metal", "cantidad": 3},
++                                    {"clase": "paper", "cantidad": 1}],
++        }
++        r = EstadisticasService(repo).resumen(USER)
++        assert [f["porcentaje"] for f in r["distribucion_clases"]] == [75.0, 25.0]
++        repo.get_prediction_stats.assert_called_once_with(COMPANY)
++
++    def test_resumen_sin_datos(self):
++        repo = repo_con_empresa()
++        repo.get_prediction_stats.return_value = {
++            "total_consultas": 0, "confianza_promedio_global": 0.0,
++            "tiempo_inferencia_promedio_ms": 0.0, "total_advertencias_baja_confianza": 0,
++            "distribucion_clases": [],
++        }
++        assert EstadisticasService(repo).resumen(USER)["distribucion_clases"] == []
++
++    def test_resumen_sin_empresa(self):
++        repo = repo_con_empresa(None)
++        with pytest.raises(UsuarioSinEmpresa):
++            EstadisticasService(repo).resumen(USER)
++        repo.get_prediction_stats.assert_not_called()
+-- 
+2.43.0
+
