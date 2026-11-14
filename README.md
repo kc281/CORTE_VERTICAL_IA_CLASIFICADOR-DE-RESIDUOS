@@ -429,7 +429,8 @@ python scripts/verificar_persistencia.py --imagen ruta\a\residuo.jpg --salida ..
 | P12    | RF-03 válido   | `GET /stats`                                | 200; `total_consultas` igual al conteo de la BD; la tabla no cambia                                               |
 
 **Resultado obtenido:** ver [`DOCS/evidencia_persistencia.md`](DOCS/evidencia_persistencia.md), el reporte generado por el script con fecha, base de datos, conteos y resultado de cada prueba.
-![](imgs/verificacion_persistencia.png) 
+
+![Verificación Persistencia  Mediante Terminal](imgs/verificacion_persistencia.png) 
 
 **Complementos**
 
