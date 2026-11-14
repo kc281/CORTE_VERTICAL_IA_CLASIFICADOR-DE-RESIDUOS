@@ -67,9 +67,10 @@ async def negocio_handler(request: Request, exc: ErrorNegocio):
 
 @app.exception_handler(RequestValidationError)
 async def validation_handler(request: Request, exc: RequestValidationError):
+    """Entrada con formato inválido (falta un campo, tipo incorrecto, ID no entero)."""
     return JSONResponse(
-        status_code=422,
-        content={"error": "Solicitud inválida. Verifique los datos enviados."},
+        status_code=400,
+        content={"detail": "Solicitud inválida. Verifique los datos enviados."},
     )
 
 
@@ -78,8 +79,25 @@ async def generic_handler(request: Request, exc: Exception):
     logger.exception("Excepción no manejada")
     return JSONResponse(
         status_code=500,
-        content={"error": "Ocurrió un error interno. Intente de nuevo."},
+        content={"detail": "Ocurrió un error interno. Intente de nuevo."},
     )
+
+
+# ─── OpenAPI: la validación responde 400 (no 422); se quita el 422 automático de /docs ───
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    from fastapi.openapi.utils import get_openapi
+    schema = get_openapi(title=app.title, version=app.version,
+                         description=app.description, routes=app.routes)
+    for operaciones in schema.get("paths", {}).values():
+        for operacion in operaciones.values():
+            operacion.get("responses", {}).pop("422", None)
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = custom_openapi
 
 
 # ─── Root informativo ────────────────────────────

@@ -30,4 +30,5 @@ class PredictionResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    error: str
+    """Estructura única de todos los errores del API."""
+    detail: str

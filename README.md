@@ -223,3 +223,146 @@ Las pruebas de `backend/tests/test_services.py` sustituyen el repositorio por un
 cd backend
 python -m pytest tests -v
 ```
+
+### 6.4 Contratos del API
+
+**Convenciones comunes a todos los endpoints**
+
+- **URL base local:** `http://localhost:8000` · Documentación interactiva: `http://localhost:8000/docs`.
+- **Autenticación:** todos los endpoints de los RF exigen el encabezado `Authorization: Bearer <access_token de Supabase>`.
+- **JSON** con nombres en `snake_case`; fechas en ISO 8601; IDs enteros generados por el backend.
+- **Estructura única de error:** `{"detail": "<mensaje>"}`. Los errores esperados (400, 401, 403, 404, 409, 413) se distinguen de un fallo interno (500). El 500 se registra en el log del servidor y responde un mensaje genérico, sin detalles técnicos.
+
+| Código | Cuándo ocurre (común a todos los endpoints) | `detail` |
+| :--- | :--- | :--- |
+| 400 | Falta un campo, tipo incorrecto o ID no numérico (validación de FastAPI) | `Solicitud inválida. Verifique los datos enviados.` |
+| 401 | No se envió el token | `No se envió el token de autenticación.` |
+| 401 | Token inválido o expirado | `Token inválido.` / `El token ha expirado` |
+| 403 | El usuario autenticado no pertenece a ninguna empresa | `El usuario no está asociado a ninguna empresa.` |
+| 500 | Error inesperado | `Ocurrió un error interno. Intente de nuevo.` |
+
+**Resumen de contratos por endpoint**
+
+| RF | Método y ruta | Entrada | Éxito | Errores específicos (además de 401 y 403) | Servicio |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| RF-01 (+ escritura RF-02) | `POST /predict` | `multipart/form-data`, campo `file`: imagen JPG/PNG/WEBP ≤ 5 MB | **201** con la clasificación y `id_prediccion` | 400 sin archivo, formato no permitido o imagen corrupta; 413 > 5 MB; 500 fallo del modelo o del guardado (no se responde 201 si no se guardó) | `ClasificacionService.clasificar` |
+| RF-02 | `GET /history?skip=0&limit=50` | Query: `skip` ≥ 0, `1 ≤ limit ≤ 100` | **200** `{total, records[]}`, del más reciente al más antiguo | 400 `skip` o `limit` fuera de rango | `HistorialService.listar` |
+| RF-02 | `GET /predict/{prediction_id}` | Ruta: ID entero positivo; sin cuerpo | **200** con el registro | 400 ID ≤ 0 o no numérico; 404 no existe o es de otra empresa | `HistorialService.obtener` |
+| RF-02 | `PATCH /predict/{prediction_id}/verify` | Ruta: ID; JSON `{"categoria_correcta": "<clase>"}` | **200** con la categoría confirmada | 400 ID inválido, campo ausente o categoría fuera de las 5 clases; 404 no existe | `HistorialService.verificar` |
+| RF-03 | `GET /stats` | Sin parámetros | **200** con las métricas de la empresa | — | `EstadisticasService.resumen` |
+
+#### RF-01 — `POST /predict`
+
+```http
+POST /predict
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+file=<residuo.jpg>
+```
+
+```json
+HTTP 201 Created
+{
+  "clase": "plastic",
+  "clase_etiqueta": "Plástico",
+  "confianza": 0.9132,
+  "probabilidades": {"biological": 0.0105, "cardboard": 0.0213, "metal": 0.0281, "paper": 0.0269, "plastic": 0.9132},
+  "color_disposicion": "blanco",
+  "advertencia": false,
+  "modelo": "MobileNetV2",
+  "tiempo_inferencia_ms": 187,
+  "timestamp": "2026-11-14T19:15:09.257145+00:00",
+  "id_prediccion": 1
+}
+```
+
+`advertencia` es `true` cuando `confianza < 0.60`. `id_prediccion` es el ID real del registro guardado en el historial (RF-02); la imagen no se almacena.
+
+| Escenario | Respuesta |
+| :--- | :--- |
+| Archivo `.txt` (`text/plain`) | `400 {"detail": "Formato no permitido. Use JPG, PNG o WEBP."}` |
+| Archivo con extensión de imagen pero corrupto | `400 {"detail": "La imagen no pudo ser procesada. Verifique que el archivo sea válido."}` |
+| Petición sin el campo `file` | `400 {"detail": "Solicitud inválida. Verifique los datos enviados."}` |
+| Imagen de 6 MB | `413 {"detail": "El archivo supera el tamaño máximo de 5 MB."}` |
+| Usuario sin empresa | `403 {"detail": "El usuario no está asociado a ninguna empresa."}` (no se ejecuta el modelo ni se guarda nada) |
+| Falla el modelo | `500 {"detail": "Ocurrió un error interno en la IA."}` (no se guarda nada) |
+| El modelo responde pero falla el guardado | `500 {"detail": "No se pudo guardar el registro de la clasificación."}` |
+
+#### RF-02 — `GET /history`, `GET /predict/{prediction_id}`, `PATCH /predict/{prediction_id}/verify`
+
+La escritura del historial ocurre en `POST /predict`. Estas operaciones lo consultan atravesando API → servicio → repositorio, siempre filtradas por la empresa del usuario.
+
+```json
+GET /history?skip=0&limit=10
+
+HTTP 200 OK
+{
+  "total": 1,
+  "records": [
+    {
+      "id": 1,
+      "fecha": "2026-11-14T19:15:09.253054",
+      "clase_predicha": "plastic",
+      "confianza": 0.9132,
+      "tiempo_inferencia": 187,
+      "advertencia_activada": false,
+      "categoria_confirmada": null,
+      "company_id": 1,
+      "user_id": "<uuid del usuario>"
+    }
+  ]
+}
+```
+
+```json
+GET /predict/1
+
+HTTP 200 OK
+{"id": 1, "fecha": "2026-11-14T19:15:09.253054", "clase_predicha": "plastic", "confianza": 0.9132, "tiempo_inferencia": 187, "advertencia_activada": false, "categoria_confirmada": null, "company_id": 1, "user_id": "<uuid del usuario>"}
+```
+
+```json
+PATCH /predict/1/verify
+Content-Type: application/json
+{"categoria_correcta": "plastic"}
+
+HTTP 200 OK
+{"message": "Predicción verificada correctamente", "categoria_confirmada": "plastic"}
+```
+
+| Escenario | Respuesta |
+| :--- | :--- |
+| `GET /predict/999999` (ID válido inexistente o de otra empresa) | `404 {"detail": "Registro no encontrado o no pertenece a su empresa."}` |
+| `GET /predict/0` | `400 {"detail": "El ID de la predicción debe ser un entero positivo."}` |
+| `GET /predict/abc` | `400 {"detail": "Solicitud inválida. Verifique los datos enviados."}` |
+| `GET /history?limit=500` | `400 {"detail": "El parámetro 'limit' debe estar entre 1 y 100."}` |
+| `GET /history?skip=-1` | `400 {"detail": "El parámetro 'skip' no puede ser negativo."}` |
+| `PATCH .../verify` con `"vidrio"` | `400 {"detail": "Categoría no válida. Use una de: biological, cardboard, metal, paper, plastic."}` |
+| `PATCH .../verify` sin cuerpo | `400 {"detail": "Solicitud inválida. Verifique los datos enviados."}` |
+| `PATCH /predict/999999/verify` | `404 {"detail": "Registro no encontrado o no pertenece a su empresa."}` |
+
+#### RF-03 — `GET /stats`
+
+```json
+GET /stats
+
+HTTP 200 OK
+{
+  "total_consultas": 1,
+  "confianza_promedio_global": 0.9132,
+  "tiempo_inferencia_promedio_ms": 187.0,
+  "total_advertencias_baja_confianza": 0,
+  "distribucion_clases": [
+    {"clase": "plastic", "cantidad": 1, "porcentaje": 100.0}
+  ]
+}
+```
+
+| Escenario | Respuesta |
+| :--- | :--- |
+| Empresa sin clasificaciones | `200` con `total_consultas: 0` y `distribucion_clases: []` |
+| Usuario sin empresa | `403 {"detail": "El usuario no está asociado a ninguna empresa."}` |
+| Falla la consulta de agregación | `500 {"detail": "Error al calcular las estadísticas."}` |
+
+> Los ejemplos se obtuvieron ejecutando el backend real (con el modelo y la autenticación sustituidos en una base de prueba). Las fechas, los IDs y los valores de confianza cambian en cada ejecución.

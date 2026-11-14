@@ -33,7 +33,7 @@ async def validate_image(file: UploadFile) -> Image.Image:
     # 3) Validar tamaño
     if len(contents) > config.MAX_FILE_SIZE_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=413,  # Payload demasiado grande
             detail=f"El archivo supera el tamaño máximo de {config.MAX_FILE_SIZE_MB} MB.",
         )
 

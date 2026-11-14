@@ -1,6 +1,7 @@
 import os
 import json
 from functools import lru_cache
+from typing import Optional
 
 import httpx
 import jwt
@@ -10,7 +11,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)  # sin token -> 401 controlado en get_current_user
 
 @lru_cache(maxsize=1)
 def _get_jwks() -> list[dict]:
@@ -20,7 +21,7 @@ def _get_jwks() -> list[dict]:
     response.raise_for_status()
     return response.json()["keys"]
 
-def _get_public_key(kid: str | None) -> object:
+def _get_public_key(kid: Optional[str]) -> object:
     """Devuelve la llave pública que coincide con el 'kid' del token."""
     keys = _get_jwks()
     if kid:
@@ -30,7 +31,9 @@ def _get_public_key(kid: str | None) -> object:
         key_data = keys[0]
     return jwt.algorithms.ECAlgorithm.from_jwk(json.dumps(key_data))
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="No se envió el token de autenticación.")
     token = credentials.credentials
     try:
         
@@ -52,7 +55,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         raise HTTPException(status_code=401, detail="El token ha expirado")
     except jwt.InvalidTokenError as e:
         print(f" ERROR AUTH DETALLADO: {str(e)}")
-        raise HTTPException(status_code=401, detail=f"Token inválido: {str(e)}")
+        raise HTTPException(status_code=401, detail="Token inválido.")
     except Exception as e:
         print(f" ERROR CRÍTICO AUTH: {str(e)}")
         raise HTTPException(status_code=500, detail="Error interno de autenticación")

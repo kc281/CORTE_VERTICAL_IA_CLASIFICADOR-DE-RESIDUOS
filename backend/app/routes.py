@@ -13,7 +13,7 @@ y el SQL en el repositorio (app/crud.py).
 
 Los errores de negocio (app/services/exceptions.py) se traducen a HTTP en app/main.py.
 """
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -22,13 +22,25 @@ from app.auth import get_current_user
 from app.crud import PredictionRepository
 from app.database import get_db
 from app.model_loader import predict as predict_model
-from app.schemas import HealthResponse, ModelInfoResponse, PredictionResponse
+from app.schemas import ErrorResponse, HealthResponse, ModelInfoResponse, PredictionResponse
 from app.services import (
     ClasificacionService, EmpresaService, EstadisticasService, HistorialService,
 )
 from app.utils import validate_image
 
 router = APIRouter()
+
+
+# ─── Errores documentados en el contrato (se muestran en /docs) ───
+def _err(descripcion: str) -> dict:
+    return {"model": ErrorResponse, "description": descripcion}
+
+
+E400 = {400: _err("Entrada inválida (formato, tipo o valor fuera de rango).")}
+E401 = {401: _err("Token ausente, inválido o expirado.")}
+E403 = {403: _err("El usuario no está asociado a ninguna empresa.")}
+E404 = {404: _err("Registro no encontrado o no pertenece a su empresa.")}
+E500 = {500: _err("Error interno (no expone detalles técnicos).")}
 
 
 # ─── Inyección de dependencias: sesión -> repositorio -> servicio ───
@@ -67,7 +79,12 @@ async def model_info() -> ModelInfoResponse:
 
 
 # ─── RF-01 (+ escritura RF-02): clasificar un residuo ───
-@router.post("/predict", response_model=PredictionResponse, tags=["RF-01 Clasificación"])
+@router.post(
+    "/predict", response_model=PredictionResponse, status_code=status.HTTP_201_CREATED,
+    tags=["RF-01 Clasificación"],
+    responses={**E400, **E401, **E403,
+               413: _err("La imagen supera el tamaño máximo (5 MB)."), **E500},
+)
 async def predict_endpoint(
     file: UploadFile = File(...),
     service: ClasificacionService = Depends(get_clasificacion_service),
@@ -78,7 +95,7 @@ async def predict_endpoint(
 
 
 # ─── RF-02: consultar el historial ───
-@router.get("/history", tags=["RF-02 Historial"])
+@router.get("/history", tags=["RF-02 Historial"], responses={**E400, **E401, **E403, **E500})
 async def get_history(
     skip: int = 0,
     limit: int = 50,
@@ -89,7 +106,8 @@ async def get_history(
     return service.listar(current_user["user_id"], skip, limit)
 
 
-@router.get("/predict/{prediction_id}", tags=["RF-02 Historial"])
+@router.get("/predict/{prediction_id}", tags=["RF-02 Historial"],
+            responses={**E400, **E401, **E403, **E404, **E500})
 async def get_prediction_by_id(
     prediction_id: int,
     service: HistorialService = Depends(get_historial_service),
@@ -103,7 +121,8 @@ class VerifyPredictionRequest(BaseModel):
     categoria_correcta: str
 
 
-@router.patch("/predict/{prediction_id}/verify", tags=["RF-02 Historial"])
+@router.patch("/predict/{prediction_id}/verify", tags=["RF-02 Historial"],
+              responses={**E400, **E401, **E403, **E404, **E500})
 async def verify_prediction(
     prediction_id: int,
     request: VerifyPredictionRequest,
@@ -116,7 +135,7 @@ async def verify_prediction(
 
 
 # ─── RF-03: panel estadístico ───
-@router.get("/stats", tags=["RF-03 Estadísticas"])
+@router.get("/stats", tags=["RF-03 Estadísticas"], responses={**E401, **E403, **E500})
 async def get_stats(
     service: EstadisticasService = Depends(get_estadisticas_service),
     current_user: dict = Depends(get_current_user),
@@ -129,7 +148,8 @@ class CompanyCreate(BaseModel):
     name: str
 
 
-@router.post("/register-company", tags=["Empresas"])
+@router.post("/register-company", tags=["Empresas"],
+             responses={**E400, **E401, 409: _err("El usuario ya pertenece a una empresa."), **E500})
 async def register_company(
     company_data: CompanyCreate,
     service: EmpresaService = Depends(get_empresa_service),
@@ -139,7 +159,7 @@ async def register_company(
     return service.registrar(current_user["user_id"], company_data.name)
 
 
-@router.get("/company-info", tags=["Empresas"])
+@router.get("/company-info", tags=["Empresas"], responses={**E401, **E403, **E404})
 async def get_company_info(
     service: EmpresaService = Depends(get_empresa_service),
     current_user: dict = Depends(get_current_user),
