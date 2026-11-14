@@ -366,3 +366,50 @@ HTTP 200 OK
 | Falla la consulta de agregación | `500 {"detail": "Error al calcular las estadísticas."}` |
 
 > Los ejemplos se obtuvieron ejecutando el backend real (con el modelo y la autenticación sustituidos en una base de prueba). Las fechas, los IDs y los valores de confianza cambian en cada ejecución.
+
+### 6.5 Verificación de persistencia real y ausencia de escrituras indebidas
+
+**Objetivo.** Demostrar, contra la base de datos real (Supabase/PostgreSQL), que:
+1. Lo que el API confirma como creado queda guardado y se recupera igual desde **otra conexión**, distinta a la del API.
+2. Los rechazos (400, 401, 404, 413) **no dejan registros huérfanos**, y las consultas (`GET`) **no modifican datos**.
+
+**Herramienta.** `backend/scripts/verificar_persistencia.py` llama al API por HTTP, como el frontend, y después de cada paso consulta la tabla `prediction_logs` con una conexión SQLAlchemy propia. Cuenta los registros de la empresa antes y después, y compara el registro creado campo por campo.
+
+**Estado inicial.** Backend corriendo en `http://localhost:8000`, conectado a la misma base que usa el script, y un usuario asociado a una empresa (fila en `company_members`).
+
+**Cómo ejecutarlo (PowerShell, desde `backend/`):**
+
+```powershell
+# Token del usuario: en la app, F12 -> Console:
+# JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => k.includes('auth-token')))).access_token
+$env:API_TOKEN = "<access_token>"
+python scripts/verificar_persistencia.py --imagen ruta\a\residuo.jpg --salida ..\DOCS\evidencia_persistencia.md
+```
+
+- `DATABASE_URL` se toma de `backend/.env`, la misma base que usa el API.
+- `--limpiar` borra al final el único registro que crea la prueba P1. Así la prueba se puede repetir sin acumular datos.
+- El script termina con código 0 si todas las pruebas cumplen y con 1 si alguna falla.
+
+**Escenarios verificados**
+
+| Prueba | RF | Acción | Verificación en la BD (otra conexión) |
+| :--- | :--- | :--- | :--- |
+| P1 | RF-01 válido | `POST /predict` con una imagen | 201 con ID real; +1 registro; clase, confianza, tiempo, advertencia, empresa y usuario coinciden con la respuesta |
+| P2 | RF-01 rechazo | Archivo `.txt` | 400; mismo número de registros antes y después |
+| P3 | RF-01 rechazo | Imagen corrupta | 400; sin registro huérfano |
+| P4 | RF-01 rechazo | Petición sin archivo | 400; sin registro huérfano |
+| P5 | RF-01 rechazo | Imagen de 6 MB | 413; sin registro huérfano |
+| P6 | RF-01 rechazo | Sin token | 401; sin registro huérfano |
+| P7 | RF-02 válido | `GET /predict/{id}` del registro creado | 200; los datos coinciden con la BD; el registro no cambia |
+| P8 | RF-02 ausencia | `GET /predict/999999999` | 404; la tabla no cambia |
+| P9 | RF-02 entrada | `GET /predict/0` | 400; la tabla no cambia |
+| P10 | RF-02 válido | `GET /history` | 200; la tabla no cambia |
+| P11 | RF-02 rechazo | `PATCH /predict/{id}/verify` con `"vidrio"` | 400; `categoria_confirmada` no cambia |
+| P12 | RF-03 válido | `GET /stats` | 200; `total_consultas` igual al conteo de la BD; la tabla no cambia |
+
+**Resultado obtenido:** ver [`DOCS/evidencia_persistencia.md`](DOCS/evidencia_persistencia.md), el reporte generado por el script con fecha, base de datos, conteos y resultado de cada prueba.
+
+**Complementos**
+- Las pruebas unitarias (§6.3) verifican, sin base de datos, que el servicio **no invoca el guardado** cuando el usuario no tiene empresa o el modelo falla, y que las consultas solo leen (`assert_not_called`).
+- La restricción `CHECK (confianza >= 0.0 AND confianza <= 1.0)` rechaza datos inconsistentes directamente en el motor de base de datos (§5, prueba 4).
+- Transacciones: `crud.py` hace `commit` tras cada escritura y `rollback` si falla; `POST /predict` responde 201 solo después de confirmar el guardado.
