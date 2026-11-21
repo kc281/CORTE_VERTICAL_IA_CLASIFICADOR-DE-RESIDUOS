@@ -41,7 +41,7 @@ Para este corte, la arquitectura evolucionó de un modelo **Stateless** (sin est
 
 ---
 
-## 🏗️ 2. Arquitectura del Sistema
+## 🏗️ 2. Diagrama de Componentes
 
 El sistema sigue un patrón **Cliente-Servidor desacoplado** en la nube:
 
