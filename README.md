@@ -44,15 +44,8 @@ Para este corte, la arquitectura evolucionó de un modelo **Stateless** (sin est
 ## 🏗️ 2. Arquitectura del Sistema
 
 El sistema sigue un patrón **Cliente-Servidor desacoplado** en la nube:
+  ![Diagrama de Componentes](DOCS/Diagram de componentes clasificador de residuos.png)
 
-```mermaid
-graph TD
-    User((Usuario)) -->|HTTPS| Vercel[Frontend React - Vercel]
-    Vercel -->|POST /predict| Render[Backend FastAPI - Render]
-    Vercel -->|GET /stats| Render
-    Render -->|Carga| Model[TensorFlow/Keras MobileNetV2]
-    Render -->|INSERT & SELECT| Supabase[(Supabase PostgreSQL)]
-```
 
 ---
 
