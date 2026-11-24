@@ -44,7 +44,7 @@ Para este corte, la arquitectura evolucionó de un modelo **Stateless** (sin est
 ## 🏗️ 2. Diagrama de Componentes
 
 El sistema sigue un patrón **Cliente-Servidor desacoplado** en la nube:
-![Diagrama de Componentes](https://www.plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/kc281/CORTE_VERTICAL_IA_CLASIFICADOR-DE-RESIDUOS/semana14-serviciosycontratos/diagrama_de_componentes.txt)
+![Diagrama de Componentes](https://www.plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/kc281/CORTE_VERTICAL_IA_CLASIFICADOR-DE-RESIDUOS/semana14-serviciosycontratos/DOCS/diagrama_de_componentes.txt)
 
 
 
